@@ -1350,6 +1350,26 @@
         }
       }
 
+      // Validate hosp conflicts
+      const hospConflicts = [];
+      for (const p of staff) {
+        if (p === person) continue;
+        const c = getCell(y, m, d, p);
+        if (am === 'hosp' && c.am === 'hosp') hospConflicts.push({ p, col: 'AM' });
+        if (pm === 'hosp' && c.pm === 'hosp') hospConflicts.push({ p, col: 'PM' });
+      }
+      if (hospConflicts.length) {
+        const names = hospConflicts.map(c => `${c.p} (${c.col})`).join(', ');
+        const ok = confirm(
+          `Hosp conflict with: ${names}.\n\nAccept to reassign hosp to ${person} and clear the conflict, or Cancel to go back.`
+        );
+        if (!ok) return false;
+        for (const { p, col } of hospConflicts) {
+          const c = getCell(y, m, d, p);
+          setCell(y, m, d, p, { ...c, [col === 'AM' ? 'am' : 'pm']: '' });
+        }
+      }
+
       setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
       if (new Date(y, m, d).getDay() === 5) {
         const sat = new Date(y, m, d + 1);
