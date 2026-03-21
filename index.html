@@ -1107,8 +1107,9 @@
 
     function scrollSecToTop(sec, behavior) {
       const app = getApp();
+      const appTop = app.getBoundingClientRect().top;
       const rect = sec.getBoundingClientRect();
-      app.scrollTo({ top: app.scrollTop + rect.top - stickyOffset(), behavior });
+      app.scrollTo({ top: app.scrollTop + rect.top - appTop - stickyOffset(), behavior });
     }
 
     // Append months below `y/m` until scrollTop can actually reach sec.offsetTop - stickyOffset()
