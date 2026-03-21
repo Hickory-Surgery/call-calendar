@@ -1394,13 +1394,29 @@
       openEdit(ny, nm, nd, person);
     }
 
+    function saveAndRetreat() {
+      if (!editing) return;
+      if (doSave() === false) return;
+      const { y, m, d, person } = editing;
+      reRenderMonth(y, m);
+      const dow  = new Date(y, m, d).getDay();
+      const prev = dow === 1 ? new Date(y, m, d - 2)   // Mon → skip back to Sat
+                 : dow === 0 ? new Date(y, m, d - 1)   // Sun → Sat
+                 :              new Date(y, m, d - 1);
+      const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
+      if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
+      else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
+      openEdit(py, pm2, pd, person);
+    }
+
     document.getElementById('editOverlay').addEventListener('click', e => {
       if (e.target === document.getElementById('editOverlay')) closeEdit();
     });
 
     document.addEventListener('keydown', e => {
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
-      if (e.key === 'Tab')    { e.preventDefault(); saveAndAdvance(); return; }
+      if (e.key === 'Tab' && !e.shiftKey)  { e.preventDefault(); saveAndAdvance(); return; }
+      if (e.key === 'Tab' &&  e.shiftKey)  { e.preventDefault(); saveAndRetreat(); return; }
       if (e.key === 'Enter')  { if (doSave() !== false) { const {y,m} = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
 
