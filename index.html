@@ -1814,8 +1814,10 @@
         }) || '';
       }
 
-      // Bariatric call: bariCall dropdown for this week
-      const bariPerson = bariCall[wk] || '';
+      // Bariatric: call person if bariatric, else backup if bariatric, else dropdown
+      const bariPerson = bariatric[callPerson]   ? callPerson
+                       : bariatric[backupPerson] ? backupPerson
+                       : bariCall[wk] || '';
 
       function set(id, name) {
         const el = document.getElementById(id);
