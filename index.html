@@ -3,6 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Call Calendar">
+  <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;landscape&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
   <title>Call Calendar</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -15,7 +20,7 @@
       --border: #D0D7DE;
       --header-bg: #37474F;
       --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      --col: repeat(6, minmax(88px, 1fr));
+      --col: repeat(6, minmax(0, 1fr));
     }
 
     body {
@@ -574,9 +579,68 @@
       letter-spacing: 0.5px;
     }
     .scroll-sentinel { height: 1px; }
+
+    /* ── Portrait nudge (phones only) ── */
+    .rotate-nudge {
+      display: none;
+    }
+
+    @media screen and (max-width: 600px) and (orientation: portrait) {
+      .rotate-nudge {
+        display: flex;
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        background: #37474F;
+        color: white;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        padding: 32px;
+        text-align: center;
+      }
+      .rotate-nudge-icon {
+        font-size: 3rem;
+        animation: rotate-hint 2s ease-in-out infinite;
+      }
+      .rotate-nudge-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+      }
+      .rotate-nudge-sub {
+        font-size: 0.85rem;
+        color: rgba(255,255,255,0.7);
+        line-height: 1.5;
+      }
+      .rotate-nudge-dismiss {
+        margin-top: 8px;
+        padding: 10px 24px;
+        border: 1.5px solid rgba(255,255,255,0.4);
+        border-radius: 8px;
+        background: transparent;
+        color: white;
+        font-size: 0.85rem;
+        cursor: pointer;
+      }
+      @keyframes rotate-hint {
+        0%   { transform: rotate(0deg); }
+        30%  { transform: rotate(90deg); }
+        70%  { transform: rotate(90deg); }
+        100% { transform: rotate(0deg); }
+      }
+    }
   </style>
 </head>
 <body>
+
+  <!-- Portrait nudge (phones only) -->
+  <div class="rotate-nudge" id="rotateNudge">
+    <div class="rotate-nudge-icon">&#x21BA;</div>
+    <div class="rotate-nudge-title">Rotate your device</div>
+    <div class="rotate-nudge-sub">This calendar works best in landscape orientation.</div>
+    <button class="rotate-nudge-dismiss" id="rotateNudgeDismiss">Continue anyway</button>
+  </div>
 
   <div class="app">
 
@@ -1424,6 +1488,11 @@
     setupObservers();
     initScroll(viewYear, viewMonth);
     setupDraggableSheet();
+
+    // Portrait nudge dismiss
+    document.getElementById('rotateNudgeDismiss').addEventListener('click', () => {
+      document.getElementById('rotateNudge').style.display = 'none';
+    });
   </script>
 </body>
 </html>
