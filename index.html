@@ -1405,15 +1405,16 @@
       document.addEventListener('touchmove', e => { if (dragging) { moveDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
       document.addEventListener('touchend', endDrag);
 
-      // Reset to bottom-sheet each time the panel opens
-      overlay.addEventListener('transitionend', () => {});
-      const origOpen = overlay.classList;
+      // Reset to bottom-sheet only when transitioning from closed → open
+      let wasOpen = overlay.classList.contains('open');
       new MutationObserver(() => {
-        if (overlay.classList.contains('open')) {
+        const isOpen = overlay.classList.contains('open');
+        if (isOpen && !wasOpen) {
           sheet.style.position = '';
           sheet.style.left = ''; sheet.style.top = ''; sheet.style.bottom = '';
           sheet.style.width = ''; sheet.style.borderRadius = ''; sheet.style.margin = '';
         }
+        wasOpen = isOpen;
       }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
     }
 
