@@ -558,14 +558,15 @@
     .drag-handle:active { cursor: grabbing; }
 
     .staff-item input[type="text"] {
-      padding: 10px 12px;
+      padding: 8px 8px;
       border: 1.5px solid #CFD8DC;
       border-radius: 8px;
       font-size: 0.9rem;
       color: #263238;
+      min-width: 0;
     }
-    .staff-short { flex: 0 0 64px; }
-    .staff-full  { flex: 1; min-width: 0; }
+    .staff-short { flex: 0 0 52px; }
+    .staff-full  { flex: 1; }
 
     .staff-item input:focus { outline: none; border-color: #37474F; }
 
@@ -1655,7 +1656,7 @@
       staff.push('');
       renderStaffList();
       setTimeout(() => {
-        const all = document.querySelectorAll('#staffList .staff-item input');
+        const all = document.querySelectorAll('#staffList .staff-item .staff-short');
         if (all.length) all[all.length - 1].focus();
       }, 40);
     });
