@@ -10,6 +10,7 @@
     :root {
       --oncall-single: #FFF176;
       --oncall-double: #FFB74D;
+      --oncall-exception: #A5D6A7;
       --border: #D0D7DE;
       --header-bg: #37474F;
       --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -148,6 +149,7 @@
     .today .cell-date { background: #1565C0; color: white; }
 
     .out-of-month .cell-date { color: #AABBCC; }
+    .out-of-month .person-row { opacity: 0.38; }
 
 
     /* ── Person row ── */
@@ -170,8 +172,11 @@
     .person-row { background: transparent; }
     .editing-highlight { outline: 2px solid #1565C0; outline-offset: 1px; border-radius: 3px; }
 
-    .am-val.oncall-single, .pm-val.oncall-single { background: var(--oncall-single); border: 1px solid #F9A825; border-radius: 2px; padding: 1px 3px; }
-    .am-val.oncall-double, .pm-val.oncall-double { background: var(--oncall-double); border: 1px solid #E65100; border-radius: 2px; padding: 1px 3px; }
+    .am-val.oncall-single, .pm-val.oncall-single { background: var(--oncall-single); border: 1px solid #F9A825; padding: 1px 3px; }
+    .am-val.oncall-double, .pm-val.oncall-double { background: var(--oncall-double); border: 1px solid #E65100; padding: 1px 3px; }
+    .am-val.exception { background: var(--oncall-exception); border: 1px solid #388E3C; padding: 1px 3px; }
+    .am-val.oncall-single, .am-val.oncall-double, .am-val.exception { border-radius: 2px 0 0 2px; border-right: none; }
+    .pm-val.oncall-single, .pm-val.oncall-double { border-radius: 0 2px 2px 0; border-left: none; }
 
     /* Person name */
     .pname {
@@ -190,7 +195,7 @@
     .slots {
       display: flex;
       align-items: center;
-      gap: 1px;
+      gap: 0;
       flex: 1;
       min-width: 0;
       overflow: hidden;
@@ -212,8 +217,7 @@
     .am-val.hosp, .pm-val.hosp { font-weight: 700; }
 
     .slot-sep {
-      font-size: 0.62rem;
-      color: #90A4AE;
+      display: none;
       flex-shrink: 0;
       padding: 0 1px;
     }
@@ -437,6 +441,13 @@
       background: var(--oncall-double);
       border-color: #E65100;
     }
+    .cg-btn.active.double::after { color: #3E0000; }
+
+    .cg-btn.active.exception {
+      background: var(--oncall-exception);
+      border-color: #388E3C;
+    }
+    .cg-btn.active.exception::after { color: #1B5E20; }
 
     .cg-btn.active.double::after { color: #3E0000; }
 
@@ -472,7 +483,17 @@
     }
 
     .staff-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-    .staff-item { display: flex; align-items: center; gap: 8px; }
+    .staff-item { display: flex; align-items: center; gap: 8px; cursor: default; }
+    .staff-item.drag-over { outline: 2px solid #1565C0; border-radius: 6px; }
+    .drag-handle {
+      cursor: grab;
+      color: #90A4AE;
+      font-size: 1.1rem;
+      padding: 0 2px;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .drag-handle:active { cursor: grabbing; }
 
     .staff-item input {
       flex: 1;
@@ -568,6 +589,10 @@
     <div class="legend-item">
       <div class="legend-swatch" style="background:var(--oncall-double)"></div>
       Double call
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--oncall-exception)"></div>
+      Exception
     </div>
     <div class="legend-item">
       <div class="legend-swatch" style="background:#CFD8DC"></div>
@@ -669,6 +694,7 @@
         pm:        c.pm        || '',
         oncall_am: c.oncall_am || legacy,
         oncall_pm: c.oncall_pm || legacy,
+        exception: c.exception || false,
       };
     }
 
@@ -756,9 +782,7 @@
 
       const dateInner = d;
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
-      if (inMonth) {
-        for (const person of staff) html += personRowHtml(y, m, d, person);
-      }
+      for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
 
@@ -782,14 +806,12 @@
       const dateInner = dateStr;
 
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
-      if (inMonth) {
-        for (const person of staff) html += personRowHtml(y, m, d, person);
-      }
+      for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
 
     function personRowHtml(y, m, d, person) {
-      const { am, pm, oncall_am, oncall_pm } = getCell(y, m, d, person);
+      const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
       if (am === 'CLOSED') {
         return `<div class="closed-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
@@ -797,13 +819,13 @@
         </div>`;
       }
       const amTxt = abbr(am), pmTxt = abbr(pm);
-      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '');
+      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '');
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '');
       return `<div class="person-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
           <span class="${amCls}">${amTxt ? esc(amTxt) : '—'}</span>
-          <span class="slot-sep">/</span>
+          <span class="slot-sep"></span>
           <span class="${pmCls}">${pmTxt ? esc(pmTxt) : '—'}</span>
         </span>
       </div>`;
@@ -812,10 +834,10 @@
     // ─────────────────────────────────────────────
     //  Edit modal
     // ─────────────────────────────────────────────
-    let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none' };
+    let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false };
 
     const ONCALL_VALS  = ['none', 'single', 'double'];
-    const ONCALL_LABEL = { none: 'No call', single: 'Single &#11044;', double: 'Double &#11044;' };
+    const ONCALL_LABEL = { none: '<u>N</u>o call', single: '<u>S</u>ingle', double: '<u>D</u>ouble' };
     const ASSIGN_LABEL = { '': '— none —', unavailable: 'unavail' };
 
     function renderChoiceGrid() {
@@ -849,6 +871,10 @@
           <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>
           <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
       }
+      oncallHtml += `<div class="cg-divider"></div>
+        <div class="cg-label"><u>E</u>xception</div>
+        <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}"></button>
+        <button class="cg-btn cg-disabled"></button>`;
       oncallHtml += '</div>';
 
       const actionsHtml = `<div class="action-grid">
@@ -889,7 +915,11 @@
       grid.querySelectorAll('.oncall-pm').forEach(btn =>
         btn.addEventListener('click', () => { editState.oncall_pm = btn.dataset.val; renderChoiceGrid(); }));
 
-      grid.querySelector('.edit-save').addEventListener('click',    () => { doSave(); closeEdit(); renderCalendar(); });
+      grid.querySelector('.exception-am').addEventListener('click', () => {
+        editState.exception = !editState.exception; renderChoiceGrid();
+      });
+
+      grid.querySelector('.edit-save').addEventListener('click',    () => { if (doSave() !== false) { closeEdit(); renderCalendar(); } });
       grid.querySelector('.edit-advance').addEventListener('click', saveAndAdvance);
       grid.querySelector('.edit-cancel').addEventListener('click',  closeEdit);
     }
@@ -910,7 +940,7 @@
       document.getElementById('editTitle').textContent =
         `${person} — ${dow} ${MONTHS[m]} ${d}`;
 
-      editState = { am: cell.am, pm: cell.pm, oncall_am: cell.oncall_am, oncall_pm: cell.oncall_pm };
+      editState = { am: cell.am, pm: cell.pm, oncall_am: cell.oncall_am, oncall_pm: cell.oncall_pm, exception: cell.exception };
       document.getElementById('editClearBtn').onclick = () => {
         clearCell(y, m, d, person); closeEdit(); renderCalendar();
       };
@@ -930,7 +960,7 @@
     // Returns display label with the shortcut letter underlined
     function labelHtml(val) {
       const raw = ASSIGN_LABEL[val] ?? val;
-      const key = KEY_SHORTCUTS[Object.keys(KEY_SHORTCUTS).find(k => KEY_SHORTCUTS[k] === val) ?? ''];
+      const key = Object.keys(KEY_SHORTCUTS).find(k => KEY_SHORTCUTS[k] === val);
       if (!key) return esc(raw);
       const idx = raw.toLowerCase().indexOf(key.toLowerCase());
       if (idx === -1) return esc(raw);
@@ -938,20 +968,42 @@
     }
 
     function doSave() {
-      if (!editing) return;
+      if (!editing) return true;
       const { y, m, d, person } = editing;
-      const { am, pm, oncall_am, oncall_pm } = editState;
-      setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm });
+      const { am, pm, oncall_am, oncall_pm, exception } = editState;
+
+      // Validate on-call conflicts
+      const conflicts = [];
+      for (const p of staff) {
+        if (p === person) continue;
+        const c = getCell(y, m, d, p);
+        if (oncall_am !== 'none' && c.oncall_am !== 'none') conflicts.push({ p, col: 'AM' });
+        if (oncall_pm !== 'none' && c.oncall_pm !== 'none') conflicts.push({ p, col: 'PM' });
+      }
+      if (conflicts.length) {
+        const names = conflicts.map(c => `${c.p} (${c.col})`).join(', ');
+        const ok = confirm(
+          `On-call conflict with: ${names}.\n\nAccept to reassign call to ${person} and clear the conflict, or Cancel to go back.`
+        );
+        if (!ok) return false;
+        for (const { p, col } of conflicts) {
+          const c = getCell(y, m, d, p);
+          setCell(y, m, d, p, { ...c, [col === 'AM' ? 'oncall_am' : 'oncall_pm']: 'none' });
+        }
+      }
+
+      setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
       if (new Date(y, m, d).getDay() === 5) {
         const sat = new Date(y, m, d + 1);
         setCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person,
           { ...getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person), oncall_am, oncall_pm });
       }
+      return true;
     }
 
     function saveAndAdvance() {
       if (!editing) return;
-      doSave();
+      if (doSave() === false) return;
       const { y, m, d, person } = editing;
       const dow  = new Date(y, m, d).getDay();
       const next = dow === 5 ? new Date(y, m, d + 1)
@@ -970,7 +1022,7 @@
     document.addEventListener('keydown', e => {
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'Tab')    { e.preventDefault(); saveAndAdvance(); return; }
-      if (e.key === 'Enter')  { doSave(); closeEdit(); renderCalendar(); return; }
+      if (e.key === 'Enter')  { if (doSave() !== false) { closeEdit(); renderCalendar(); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
 
       const key = e.key.toLowerCase();
@@ -982,7 +1034,23 @@
       // 'b' cycles ba-C → ba-F → ba-C
       if (key === 'b') {
         editState.am = editState.pm = editState.am === 'ba-C' ? 'ba-F' : 'ba-C';
-        renderChoiceGrid();
+        renderChoiceGrid(); return;
+      }
+      if (key === 'n') {
+        editState.oncall_am = editState.oncall_pm = 'none';
+        renderChoiceGrid(); return;
+      }
+      if (key === 'e') {
+        editState.exception = !editState.exception;
+        renderChoiceGrid(); return;
+      }
+      if (key === 's') {
+        editState.oncall_am = editState.oncall_pm = 'single';
+        renderChoiceGrid(); return;
+      }
+      if (key === 'd') {
+        editState.oncall_am = editState.oncall_pm = 'double';
+        renderChoiceGrid(); return;
       }
     });
 
@@ -1006,7 +1074,8 @@
     function renderStaffList() {
       const list = document.getElementById('staffList');
       list.innerHTML = staff.map((name, i) => `
-        <div class="staff-item">
+        <div class="staff-item" draggable="true" data-idx="${i}">
+          <span class="drag-handle">&#8942;</span>
           <input type="text" value="${esc(name)}" placeholder="Name">
           <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
         </div>
@@ -1018,6 +1087,32 @@
           staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
           staff.splice(parseInt(btn.dataset.idx), 1);
           if (!staff.length) staff = [''];
+          renderStaffList();
+        });
+      });
+
+      let dragSrc = null;
+      list.querySelectorAll('.staff-item').forEach(item => {
+        item.addEventListener('dragstart', e => {
+          dragSrc = item;
+          e.dataTransfer.effectAllowed = 'move';
+        });
+        item.addEventListener('dragover', e => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          list.querySelectorAll('.staff-item').forEach(el => el.classList.remove('drag-over'));
+          if (item !== dragSrc) item.classList.add('drag-over');
+        });
+        item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+        item.addEventListener('drop', e => {
+          e.preventDefault();
+          item.classList.remove('drag-over');
+          if (!dragSrc || dragSrc === item) return;
+          const inputs = list.querySelectorAll('.staff-item input');
+          staff = Array.from(inputs).map(i => i.value.trim());
+          const from = parseInt(dragSrc.dataset.idx);
+          const to   = parseInt(item.dataset.idx);
+          staff.splice(to, 0, staff.splice(from, 1)[0]);
           renderStaffList();
         });
       });
