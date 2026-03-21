@@ -198,6 +198,8 @@
       white-space: nowrap;
     }
     .day-summary .ds-value.empty { color: rgba(255,255,255,0.3); }
+    .day-summary .ds-label.primary { font-size: 0.68rem; color: rgba(255,255,255,0.85); }
+    .day-summary .ds-value.primary { font-size: 0.85rem; font-weight: 700; }
 
     .cell-date { background: #CFD8DC; color: #37474F; }
 
@@ -754,7 +756,7 @@
       <button id="nextMonth" aria-label="Next month">&#8250;</button>
     </div>
     <div class="day-summary" id="daySummary">
-      <span class="ds-label">Call</span>     <span class="ds-value empty" id="ds-call">—</span>
+      <span class="ds-label primary">Call</span><span class="ds-value empty primary" id="ds-call">—</span>
       <span class="ds-label">Backup</span>   <span class="ds-value empty" id="ds-backup">—</span>
       <span class="ds-label">Bariatric</span><span class="ds-value empty" id="ds-bari">—</span>
     </div>
@@ -1891,7 +1893,8 @@
       function set(id, name) {
         const el = document.getElementById(id);
         el.textContent = name ? displayName(name) : '—';
-        el.className = 'ds-value' + (name ? '' : ' empty');
+        const isPrimary = el.classList.contains('primary');
+        el.className = 'ds-value' + (name ? '' : ' empty') + (isPrimary ? ' primary' : '');
       }
       set('ds-call',   callPerson);
       set('ds-backup', backupPerson);
