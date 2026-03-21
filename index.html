@@ -293,6 +293,9 @@
     }
 
     .closed-row:hover { filter: brightness(0.9); }
+    .closed-row.oncall-single { background: var(--oncall-single); }
+    .closed-row.oncall-double { background: var(--oncall-double); }
+    .closed-row.oncall-exception, .closed-row.exception { background: var(--oncall-exception); }
 
     .pname-closed {
       font-size: 0.58rem;
@@ -1235,8 +1238,9 @@
     function personRowHtml(y, m, d, person) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
-      if (am === 'CLOSED' && oncall_am === 'none' && oncall_pm === 'none') {
-        return `<div class="closed-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+      if (am === 'CLOSED') {
+        const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
+        return `<div class="closed-row${callCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
