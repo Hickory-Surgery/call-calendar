@@ -153,7 +153,25 @@
       margin: -4px -3px 3px -3px;
       padding: 3px 5px;
       line-height: 1.4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 4px;
     }
+
+    .backup-select {
+      font-size: 0.6rem;
+      font-weight: 600;
+      color: #37474F;
+      background: rgba(255,255,255,0.55);
+      border: 1px solid rgba(0,0,0,0.15);
+      border-radius: 3px;
+      padding: 1px 2px;
+      cursor: pointer;
+      max-width: 52px;
+      flex-shrink: 0;
+    }
+    .backup-select:focus { outline: none; border-color: #1565C0; }
 
     .cell-date { background: #CFD8DC; color: #37474F; }
 
@@ -805,6 +823,7 @@
     const DATA_KEY      = 'callcal_data';
     const STAFF_KEY     = 'callcal_staff';
     const BARIATRIC_KEY = 'callcal_bariatric';
+    const BACKUP_KEY    = 'callcal_backup';
 
     // ─────────────────────────────────────────────
     //  State
@@ -817,6 +836,7 @@
     let staff     = loadStaff();
     let data      = loadData();
     let bariatric = loadBariatric();
+    let backup    = loadBackup();
     let editing   = null;
 
     // ─────────────────────────────────────────────
@@ -851,6 +871,22 @@
 
     function saveBariatric() {
       localStorage.setItem(BARIATRIC_KEY, JSON.stringify(bariatric));
+    }
+
+    function loadBackup() {
+      try { return JSON.parse(localStorage.getItem(BACKUP_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveBackup() {
+      localStorage.setItem(BACKUP_KEY, JSON.stringify(backup));
+    }
+
+    function weekKey(sat) {
+      // Monday of the week containing sat (sat.getDay() === 6, so mon = sat - 5)
+      const mon = new Date(sat);
+      mon.setDate(sat.getDate() - 5);
+      return `${mon.getFullYear()}-${mon.getMonth()+1}-${mon.getDate()}`;
     }
 
     function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
@@ -942,10 +978,19 @@
       grid.className = 'cal-grid';
       grid.innerHTML = buildMonthHTML(y, m);
       grid.onclick = e => {
+        if (e.target.closest('.backup-select')) return;
         const row = e.target.closest('[data-person]');
         if (!row) return;
         openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person);
       };
+      grid.addEventListener('change', e => {
+        const sel = e.target.closest('.backup-select');
+        if (!sel) return;
+        const wk = sel.dataset.wk;
+        if (sel.value) backup[wk] = sel.value;
+        else delete backup[wk];
+        saveBackup();
+      });
       sec.appendChild(grid);
 
       if (headingObserver) headingObserver.observe(hdg);
@@ -1104,9 +1149,15 @@
       if (isToday)  cls += ' today';
 
       const dateStr = satIn && sunIn ? `${sd} / ${ud}` : satIn ? `${sd}` : `${ud}`;
-      const dateInner = dateStr;
+      const wk = weekKey(sat);
+      const selectedBackup = backup[wk] || '';
+      const staffOptions = `<option value=""></option>` +
+        staff.map(p => `<option value="${esc(p)}"${selectedBackup === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
+      const backupSelect = inMonth
+        ? `<select class="backup-select" data-wk="${esc(wk)}">${staffOptions}</select>`
+        : '';
 
-      let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
+      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${backupSelect}</div>`;
       if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
