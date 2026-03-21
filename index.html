@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <title>Call Calendar</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --oncall-single: #FFF176;
+      --oncall-double: #FFB74D;
+      --border: #D0D7DE;
+      --header-bg: #37474F;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --col: repeat(6, minmax(88px, 1fr));
+    }
+
+    body {
+      font-family: var(--font);
+      background: #F0F2F5;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: var(--header-bg);
+      color: white;
+      flex-shrink: 0;
+      gap: 8px;
+    }
+
+    .month-nav { display: flex; align-items: center; gap: 8px; }
+
+    .month-nav button {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-size: 1.25rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .month-nav button:hover { background: rgba(255,255,255,0.28); }
+
+    .month-label {
+      font-size: 1rem;
+      font-weight: 600;
+      min-width: 148px;
+      text-align: center;
+    }
+
+    .topbar-actions { display: flex; gap: 6px; }
+
+    .icon-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-btn:hover { background: rgba(255,255,255,0.28); }
+
+    /* ── Calendar container ── */
+    .cal-container {
+      flex: 1;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Day-of-week header ── */
+    .day-headers {
+      display: grid;
+      grid-template-columns: var(--col);
+      background: var(--header-bg);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .day-headers > div {
+      padding: 5px 4px;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: rgba(255,255,255,0.9);
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .day-headers > div:last-child { border-right: none; }
+    .day-headers .weekend { color: rgba(255,255,255,0.6); }
+
+    /* ── Calendar grid ── */
+    .cal-grid {
+      display: grid;
+      grid-template-columns: var(--col);
+      gap: 1px;
+      background: var(--border);
+      flex: 1;
+    }
+
+    /* ── Day cell ── */
+    .day-cell {
+      background: white;
+      padding: 4px 3px 5px;
+      min-height: 0;
+    }
+
+    .day-cell.weekend { background: #F8F9FA; }
+    .day-cell.out-of-month { background: #ECEEF1; }
+
+    /* Date number — spans full cell width, colored when on-call */
+    .cell-date {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #546E7A;
+      /* bleed to edges of the padded cell */
+      margin: -4px -3px 3px -3px;
+      padding: 3px 5px;
+      line-height: 1.4;
+    }
+
+    .cell-date { background: #CFD8DC; color: #37474F; }
+
+    .today .cell-date { background: #1565C0; color: white; }
+
+    .out-of-month .cell-date { color: #AABBCC; }
+
+
+    /* ── Person row ── */
+    .person-row {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      padding: 2px 3px;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      cursor: pointer;
+      min-height: 20px;
+      transition: filter 0.08s;
+      overflow: hidden;
+    }
+
+    .person-row:hover  { filter: brightness(0.89); }
+    .person-row:active { filter: brightness(0.8); }
+
+    .person-row { background: transparent; }
+    .editing-highlight { outline: 2px solid #1565C0; outline-offset: 1px; border-radius: 3px; }
+
+    .am-val.oncall-single, .pm-val.oncall-single { background: var(--oncall-single); border: 1px solid #F9A825; border-radius: 2px; padding: 1px 3px; }
+    .am-val.oncall-double, .pm-val.oncall-double { background: var(--oncall-double); border: 1px solid #E65100; border-radius: 2px; padding: 1px 3px; }
+
+    /* Person name */
+    .pname {
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: #37474F;
+      min-width: 26px;
+      max-width: 26px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* AM / PM slots */
+    .slots {
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .am-val, .pm-val {
+      font-size: 0.68rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+      text-align: center;
+    }
+
+    .am-val { color: #1A237E; }
+    .pm-val { color: #4A148C; }
+    .am-val.empty, .pm-val.empty { color: #B0BEC5; }
+    .am-val.hosp, .pm-val.hosp { font-weight: 700; }
+
+    .slot-sep {
+      font-size: 0.62rem;
+      color: #90A4AE;
+      flex-shrink: 0;
+      padding: 0 1px;
+    }
+
+    /* CLOSED row */
+    .closed-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px 3px;
+      border-radius: 3px;
+      margin-bottom: 2px;
+      min-height: 20px;
+      background: #CFD8DC;
+      cursor: pointer;
+      transition: filter 0.08s;
+    }
+
+    .closed-row:hover { filter: brightness(0.9); }
+
+    .pname-closed {
+      font-size: 0.58rem;
+      font-weight: 700;
+      color: #37474F;
+      min-width: 26px;
+      flex-shrink: 0;
+    }
+
+    .closed-label {
+      font-size: 0.55rem;
+      font-weight: 800;
+      color: #455A64;
+      letter-spacing: 0.3px;
+      flex: 1;
+      text-align: center;
+    }
+
+    /* ── Legend ── */
+    .legend {
+      display: flex;
+      gap: 14px;
+      padding: 5px 14px;
+      background: white;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.68rem;
+      color: #546E7A;
+    }
+
+    .legend-swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      border: 1px solid rgba(0,0,0,0.12);
+    }
+
+    /* ── Bottom-sheet base ── */
+    .sheet-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .sheet-overlay.open { display: flex; }
+
+    .sheet {
+      background: white;
+      border-radius: 16px 16px 0 0;
+      width: 100%;
+      max-width: 380px;
+      padding: 14px 16px 22px;
+      max-height: 88vh;
+      overflow-y: auto;
+    }
+
+    .sheet-handle {
+      width: 40px;
+      height: 4px;
+      background: #CCC;
+      border-radius: 2px;
+      margin: 0 auto 14px;
+    }
+
+    .sheet-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .sheet-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #263238;
+    }
+
+    .btn-clear-inline {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 3px 9px;
+      border: 1.5px solid #FFCDD2;
+      border-radius: 6px;
+      background: #FFEBEE;
+      color: #B71C1C;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .btn-clear-inline:hover { background: #FFCDD2; }
+
+    /* ── Edit panel two-column layout ── */
+    .edit-layout {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .assign-col { flex: 1; min-width: 0; }
+
+    .right-col {
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    /* tighter grid for the oncall section */
+    .cg-oncall { grid-template-columns: max-content 36px 36px; }
+
+    .action-grid {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 10px;
+      margin-top: auto;
+    }
+
+    .action-grid .btn {
+      padding: 9px 18px;
+      font-size: 0.8rem;
+      flex: none;
+    }
+
+    /* ── Choice grid (edit modal) ── */
+    .cg-grid {
+      display: grid;
+      grid-template-columns: max-content 42px 42px;
+      gap: 3px;
+      margin-bottom: 8px;
+    }
+
+    .cg-col-hdr {
+      text-align: center;
+      font-size: 0.68rem;
+      font-weight: 700;
+      color: #607D8B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding-bottom: 2px;
+    }
+
+    .cg-label {
+      font-size: 0.85rem;
+      color: #37474F;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 6px 0 0;
+      text-align: right;
+    }
+
+    .cg-divider {
+      grid-column: 1 / -1;
+      height: 1px;
+      background: #E0E7EF;
+      margin: 4px 0;
+    }
+
+    .cg-btn {
+      height: 30px;
+      border: 1.5px solid #D0D7DE;
+      border-radius: 5px;
+      background: #F5F7F9;
+      cursor: pointer;
+      transition: background 0.1s, border-color 0.1s;
+    }
+
+    .cg-btn:hover { filter: brightness(0.94); }
+    .cg-label.cg-disabled { color: #B0BEC5; }
+    .cg-btn.cg-disabled { opacity: 0.25; pointer-events: none; }
+
+    .cg-btn.active {
+      background: #455A64;
+      border-color: #263238;
+    }
+
+    .cg-btn.active::after {
+      content: '✓';
+      color: white;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .cg-btn.active.single {
+      background: var(--oncall-single);
+      border-color: #F9A825;
+    }
+
+    .cg-btn.active.single::after { color: #4A3000; }
+
+    .cg-btn.active.double {
+      background: var(--oncall-double);
+      border-color: #E65100;
+    }
+
+    .cg-btn.active.double::after { color: #3E0000; }
+
+    .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+
+    .btn {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-save   { background: #37474F; color: white; }
+    .btn-save:hover   { background: #263238; }
+    .btn-cancel { background: #ECEFF1; color: #37474F; }
+    .btn-cancel:hover { background: #CFD8DC; }
+    .btn-clear   { background: #FFEBEE; color: #B71C1C; flex: 0 0 auto; padding: 12px 16px; }
+    .btn-clear:hover   { background: #FFCDD2; }
+    .btn-advance { background: #1565C0; color: white; }
+    .btn-advance:hover { background: #0D47A1; }
+
+    /* ── Settings ── */
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #607D8B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .staff-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+    .staff-item { display: flex; align-items: center; gap: 8px; }
+
+    .staff-item input {
+      flex: 1;
+      padding: 10px 12px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #263238;
+    }
+
+    .staff-item input:focus { outline: none; border-color: #37474F; }
+
+    .remove-btn {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: #FFEBEE;
+      color: #B71C1C;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .add-btn {
+      width: 100%;
+      padding: 10px;
+      border: 2px dashed #B0BEC5;
+      border-radius: 8px;
+      background: none;
+      color: #607D8B;
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-bottom: 20px;
+    }
+
+    .add-btn:hover { background: #F5F5F5; }
+
+    .data-btn {
+      display: block;
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 8px;
+      background: white;
+      color: #37474F;
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      margin-bottom: 8px;
+    }
+
+    .data-btn:hover { background: #ECEFF1; }
+    .data-btn.danger { color: #B71C1C; border-color: #FFCDD2; }
+    .data-btn.danger:hover { background: #FFEBEE; }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="month-nav">
+      <button id="prevMonth" aria-label="Previous month">&#8249;</button>
+      <span class="month-label" id="monthLabel"></span>
+      <button id="nextMonth" aria-label="Next month">&#8250;</button>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="todayBtn" title="Go to today">&#9711;</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
+    </div>
+  </div>
+
+  <!-- Calendar -->
+  <div class="cal-container">
+    <div class="day-headers">
+      <div>Mon</div>
+      <div>Tue</div>
+      <div>Wed</div>
+      <div>Thu</div>
+      <div>Fri</div>
+      <div class="weekend">Sat / Sun</div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--oncall-single)"></div>
+      Single call
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:var(--oncall-double)"></div>
+      Double call
+    </div>
+    <div class="legend-item">
+      <div class="legend-swatch" style="background:#CFD8DC"></div>
+      Closed
+    </div>
+  </div>
+
+  <!-- Edit modal -->
+  <div class="sheet-overlay" id="editOverlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title-row">
+        <div class="sheet-title" id="editTitle"></div>
+        <button class="btn-clear-inline" id="editClearBtn">Clear</button>
+      </div>
+
+      <div id="choiceGrid"></div>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div class="sheet-overlay" id="settingsOverlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">Settings</div>
+
+      <div class="section-label">Staff</div>
+      <div class="staff-list" id="staffList"></div>
+      <button class="add-btn" id="addStaffBtn">+ Add person</button>
+
+      <div class="section-label">Data</div>
+      <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
+      <button class="data-btn" id="importBtn">&#8593; Import data from JSON</button>
+      <button class="data-btn danger" id="clearMonthBtn">&#x2715; Clear this month's data</button>
+      <button class="data-btn danger" id="clearAllBtn">&#x2715; Clear all data</button>
+
+      <div class="btn-row">
+        <button class="btn btn-save" id="settingsDone">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <input type="file" id="importFile" accept=".json" style="display:none">
+
+  <script>
+    // ─────────────────────────────────────────────
+    //  Constants
+    // ─────────────────────────────────────────────
+    const ASSIGNMENTS = ['', 'ov', 'hosp', 'C-surg', 'F-surg', 'ba-C', 'ba-F', 'admin', 'unavailable', 'CLOSED'];
+    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const DATA_KEY  = 'callcal_data';
+    const STAFF_KEY = 'callcal_staff';
+
+    // ─────────────────────────────────────────────
+    //  State
+    // ─────────────────────────────────────────────
+    const today = new Date();
+
+    let viewYear  = today.getFullYear();
+    let viewMonth = today.getMonth();
+
+    let staff   = loadStaff();
+    let data    = loadData();
+    let editing = null;
+
+    // ─────────────────────────────────────────────
+    //  Persistence
+    // ─────────────────────────────────────────────
+    function loadData() {
+      try { return JSON.parse(localStorage.getItem(DATA_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveData() {
+      localStorage.setItem(DATA_KEY, JSON.stringify(data));
+    }
+
+    function loadStaff() {
+      try {
+        const s = JSON.parse(localStorage.getItem(STAFF_KEY));
+        return Array.isArray(s) && s.length ? s : ['Person 1', 'Person 2', 'Person 3'];
+      } catch {
+        return ['Person 1', 'Person 2', 'Person 3'];
+      }
+    }
+
+    function saveStaff() {
+      localStorage.setItem(STAFF_KEY, JSON.stringify(staff));
+    }
+
+    function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
+
+    function getCell(y, m, d, person) {
+      const c = data[cellKey(y, m, d, person)] || {};
+      const legacy = c.oncall || 'none'; // backwards compat
+      return {
+        am:        c.am        || '',
+        pm:        c.pm        || '',
+        oncall_am: c.oncall_am || legacy,
+        oncall_pm: c.oncall_pm || legacy,
+      };
+    }
+
+    function setCell(y, m, d, person, val) {
+      data[cellKey(y, m, d, person)] = val;
+      saveData();
+    }
+
+    function clearCell(y, m, d, person) {
+      delete data[cellKey(y, m, d, person)];
+      saveData();
+    }
+
+    // ─────────────────────────────────────────────
+    //  Helpers
+    // ─────────────────────────────────────────────
+    function esc(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Abbreviate long values to fit narrow cells
+    function abbr(s) {
+      if (!s) return '';
+      if (s === 'unavailable') return 'unavail';
+      return s;
+    }
+
+    // Truncate name to fit name column
+    function shortName(s) {
+      return s.length > 4 ? s.slice(0, 4) : s;
+    }
+
+    // ─────────────────────────────────────────────
+    //  Render
+    // ─────────────────────────────────────────────
+    function render() {
+      document.getElementById('monthLabel').textContent =
+        `${MONTHS[viewMonth]} ${viewYear}`;
+      renderCalendar();
+    }
+
+    function renderCalendar() {
+      // Monday on or before the 1st
+      const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+      const monOffset = firstDow === 0 ? 6 : firstDow - 1;
+      const cur = new Date(viewYear, viewMonth, 1 - monOffset);
+
+      // Last Sunday on or after the last day of month
+      const lastDay = new Date(viewYear, viewMonth + 1, 0);
+      const lastDow = lastDay.getDay();
+      const end = new Date(viewYear, viewMonth + 1, lastDow === 0 ? 0 : 7 - lastDow);
+
+      let html = '';
+      while (cur <= end) {
+        // Mon–Fri: one cell each
+        for (let i = 0; i < 5; i++) {
+          html += renderDayCell(new Date(cur));
+          cur.setDate(cur.getDate() + 1);
+        }
+        // Sat + Sun: one combined cell
+        const sat = new Date(cur); cur.setDate(cur.getDate() + 1);
+        const sun = new Date(cur); cur.setDate(cur.getDate() + 1);
+        html += renderWeekendCell(sat, sun);
+      }
+
+      const grid = document.getElementById('calGrid');
+      grid.innerHTML = html;
+      grid.onclick = e => {
+        const row = e.target.closest('[data-person]');
+        if (!row) return;
+        openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person);
+      };
+    }
+
+    function renderDayCell(date) {
+      const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
+      const inMonth = m === viewMonth && y === viewYear;
+      const isToday = y === today.getFullYear() && m === today.getMonth() && d === today.getDate();
+
+      let cls = 'day-cell';
+      if (isToday)  cls += ' today';
+      if (!inMonth) cls += ' out-of-month';
+
+      const dateInner = d;
+      let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
+      if (inMonth) {
+        for (const person of staff) html += personRowHtml(y, m, d, person);
+      }
+      return html + '</div>';
+    }
+
+    function renderWeekendCell(sat, sun) {
+      const sd = sat.getDate(), sm = sat.getMonth(), sy = sat.getFullYear();
+      const ud = sun.getDate(), um = sun.getMonth(), uy = sun.getFullYear();
+      const satIn = sm === viewMonth && sy === viewYear;
+      const sunIn = um === viewMonth && uy === viewYear;
+      const isToday = (sy === today.getFullYear() && sm === today.getMonth() && sd === today.getDate())
+                   || (uy === today.getFullYear() && um === today.getMonth() && ud === today.getDate());
+
+      // Use whichever day is in-month as the data day (Saturday takes priority)
+      const [y, m, d] = satIn ? [sy, sm, sd] : [uy, um, ud];
+      const inMonth = satIn || sunIn;
+
+      let cls = 'day-cell weekend';
+      if (!inMonth) cls += ' out-of-month';
+      if (isToday)  cls += ' today';
+
+      const dateStr = satIn && sunIn ? `${sd} / ${ud}` : satIn ? `${sd}` : `${ud}`;
+      const dateInner = dateStr;
+
+      let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
+      if (inMonth) {
+        for (const person of staff) html += personRowHtml(y, m, d, person);
+      }
+      return html + '</div>';
+    }
+
+    function personRowHtml(y, m, d, person) {
+      const { am, pm, oncall_am, oncall_pm } = getCell(y, m, d, person);
+      const nm = esc(shortName(person));
+      if (am === 'CLOSED') {
+        return `<div class="closed-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+          <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
+        </div>`;
+      }
+      const amTxt = abbr(am), pmTxt = abbr(pm);
+      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '');
+      const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '');
+      return `<div class="person-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+        <span class="pname">${nm}</span>
+        <span class="slots">
+          <span class="${amCls}">${amTxt ? esc(amTxt) : '—'}</span>
+          <span class="slot-sep">/</span>
+          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : '—'}</span>
+        </span>
+      </div>`;
+    }
+
+    // ─────────────────────────────────────────────
+    //  Edit modal
+    // ─────────────────────────────────────────────
+    let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none' };
+
+    const ONCALL_VALS  = ['none', 'single', 'double'];
+    const ONCALL_LABEL = { none: 'No call', single: 'Single &#11044;', double: 'Double &#11044;' };
+    const ASSIGN_LABEL = { '': '— none —', unavailable: 'unavail' };
+
+    function renderChoiceGrid() {
+      const dow = editing && new Date(editing.y, editing.m, editing.d).getDay();
+      const isWeekend = dow === 6 || dow === 0;
+      const colA = isWeekend ? 'Sat' : 'AM';
+      const colB = isWeekend ? 'Sun' : 'PM';
+      const dis  = isWeekend ? ' cg-disabled' : '';
+
+      // Left column: assignment choices
+      let assignHtml = `<div class="cg-grid">
+        <div></div>
+        <div class="cg-col-hdr">${colA}</div>
+        <div class="cg-col-hdr">${colB}</div>`;
+
+      for (const val of ASSIGNMENTS) {
+        assignHtml += `<div class="cg-label${dis}">${labelHtml(val)}</div>
+          <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>
+          <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>`;
+      }
+      assignHtml += '</div>';
+
+      // Right column: on-call + action buttons
+      let oncallHtml = `<div class="cg-grid cg-oncall">
+        <div></div>
+        <div class="cg-col-hdr">${colA}</div>
+        <div class="cg-col-hdr">${colB}</div>`;
+
+      for (const val of ONCALL_VALS) {
+        oncallHtml += `<div class="cg-label">${ONCALL_LABEL[val]}</div>
+          <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>
+          <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
+      }
+      oncallHtml += '</div>';
+
+      const actionsHtml = `<div class="action-grid">
+        <button class="btn btn-cancel  edit-cancel">Cancel</button>
+        <button class="btn btn-save    edit-save">Save</button>
+        <button class="btn btn-advance edit-advance">Save &#8594;</button>
+      </div>`;
+
+      const html = `<div class="edit-layout">
+        <div class="assign-col">${assignHtml}</div>
+        <div class="right-col">${oncallHtml}${actionsHtml}</div>
+      </div>`;
+
+      const grid = document.getElementById('choiceGrid');
+      grid.innerHTML = html;
+
+      grid.querySelectorAll('.asgn-am').forEach(btn =>
+        btn.addEventListener('click', () => {
+          if (btn.dataset.val === 'CLOSED' && editing) {
+            const { y, m, d } = editing;
+            for (const p of staff) {
+              setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
+            }
+            closeEdit(); renderCalendar(); return;
+          }
+          editState.am = editState.pm = btn.dataset.val;
+          renderChoiceGrid();
+        }));
+
+      grid.querySelectorAll('.asgn-pm').forEach(btn =>
+        btn.addEventListener('click', () => { editState.pm = btn.dataset.val; renderChoiceGrid(); }));
+
+      grid.querySelectorAll('.oncall-am').forEach(btn =>
+        btn.addEventListener('click', () => {
+          editState.oncall_am = editState.oncall_pm = btn.dataset.val; renderChoiceGrid();
+        }));
+
+      grid.querySelectorAll('.oncall-pm').forEach(btn =>
+        btn.addEventListener('click', () => { editState.oncall_pm = btn.dataset.val; renderChoiceGrid(); }));
+
+      grid.querySelector('.edit-save').addEventListener('click',    () => { doSave(); closeEdit(); renderCalendar(); });
+      grid.querySelector('.edit-advance').addEventListener('click', saveAndAdvance);
+      grid.querySelector('.edit-cancel').addEventListener('click',  closeEdit);
+    }
+
+    function setEditHighlight(y, m, d, person) {
+      document.querySelectorAll('.editing-highlight').forEach(el => el.classList.remove('editing-highlight'));
+      if (y == null) return;
+      document.querySelectorAll(`[data-y="${y}"][data-m="${m}"][data-d="${d}"]`).forEach(el => {
+        if (el.dataset.person === person) el.classList.add('editing-highlight');
+      });
+    }
+
+    function openEdit(y, m, d, person) {
+      editing = { y, m, d, person };
+      const cell = getCell(y, m, d, person);
+      const dow  = DAYS[new Date(y, m, d).getDay()];
+
+      document.getElementById('editTitle').textContent =
+        `${person} — ${dow} ${MONTHS[m]} ${d}`;
+
+      editState = { am: cell.am, pm: cell.pm, oncall_am: cell.oncall_am, oncall_pm: cell.oncall_pm };
+      document.getElementById('editClearBtn').onclick = () => {
+        clearCell(y, m, d, person); closeEdit(); renderCalendar();
+      };
+      renderChoiceGrid();
+      setEditHighlight(y, m, d, person);
+      document.getElementById('editOverlay').classList.add('open');
+    }
+
+    function closeEdit() {
+      document.getElementById('editOverlay').classList.remove('open');
+      setEditHighlight(null);
+      editing = null;
+    }
+
+    const KEY_SHORTCUTS = { o: 'ov', h: 'hosp', c: 'C-surg', f: 'F-surg', a: 'admin', u: 'unavailable' };
+
+    // Returns display label with the shortcut letter underlined
+    function labelHtml(val) {
+      const raw = ASSIGN_LABEL[val] ?? val;
+      const key = KEY_SHORTCUTS[Object.keys(KEY_SHORTCUTS).find(k => KEY_SHORTCUTS[k] === val) ?? ''];
+      if (!key) return esc(raw);
+      const idx = raw.toLowerCase().indexOf(key.toLowerCase());
+      if (idx === -1) return esc(raw);
+      return esc(raw.slice(0, idx)) + '<u>' + esc(raw[idx]) + '</u>' + esc(raw.slice(idx + 1));
+    }
+
+    function doSave() {
+      if (!editing) return;
+      const { y, m, d, person } = editing;
+      const { am, pm, oncall_am, oncall_pm } = editState;
+      setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm });
+      if (new Date(y, m, d).getDay() === 5) {
+        const sat = new Date(y, m, d + 1);
+        setCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person,
+          { ...getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person), oncall_am, oncall_pm });
+      }
+    }
+
+    function saveAndAdvance() {
+      if (!editing) return;
+      doSave();
+      const { y, m, d, person } = editing;
+      const dow  = new Date(y, m, d).getDay();
+      const next = dow === 5 ? new Date(y, m, d + 1)
+                 : dow === 6 ? new Date(y, m, d + 2)
+                 :              new Date(y, m, d + 1);
+      const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
+      if (nm !== viewMonth || ny !== viewYear) { viewYear = ny; viewMonth = nm; }
+      renderCalendar();
+      openEdit(ny, nm, nd, person);
+    }
+
+    document.getElementById('editOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('editOverlay')) closeEdit();
+    });
+
+    document.addEventListener('keydown', e => {
+      if (!document.getElementById('editOverlay').classList.contains('open')) return;
+      if (e.key === 'Tab')    { e.preventDefault(); saveAndAdvance(); return; }
+      if (e.key === 'Enter')  { doSave(); closeEdit(); renderCalendar(); return; }
+      if (e.key === 'Escape') { closeEdit(); return; }
+
+      const key = e.key.toLowerCase();
+      if (KEY_SHORTCUTS[key]) {
+        editState.am = editState.pm = KEY_SHORTCUTS[key];
+        renderChoiceGrid();
+        return;
+      }
+      // 'b' cycles ba-C → ba-F → ba-C
+      if (key === 'b') {
+        editState.am = editState.pm = editState.am === 'ba-C' ? 'ba-F' : 'ba-C';
+        renderChoiceGrid();
+      }
+    });
+
+    // ─────────────────────────────────────────────
+    //  Settings
+    // ─────────────────────────────────────────────
+    function openSettings() {
+      renderStaffList();
+      document.getElementById('settingsOverlay').classList.add('open');
+    }
+
+    function closeSettings() {
+      const inputs = document.querySelectorAll('#staffList .staff-item input');
+      staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+      if (!staff.length) staff = ['Person 1'];
+      saveStaff();
+      document.getElementById('settingsOverlay').classList.remove('open');
+      render();
+    }
+
+    function renderStaffList() {
+      const list = document.getElementById('staffList');
+      list.innerHTML = staff.map((name, i) => `
+        <div class="staff-item">
+          <input type="text" value="${esc(name)}" placeholder="Name">
+          <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const inputs = document.querySelectorAll('#staffList .staff-item input');
+          staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+          staff.splice(parseInt(btn.dataset.idx), 1);
+          if (!staff.length) staff = [''];
+          renderStaffList();
+        });
+      });
+    }
+
+    document.getElementById('addStaffBtn').addEventListener('click', () => {
+      const inputs = document.querySelectorAll('#staffList .staff-item input');
+      staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+      staff.push('');
+      renderStaffList();
+      setTimeout(() => {
+        const all = document.querySelectorAll('#staffList .staff-item input');
+        if (all.length) all[all.length - 1].focus();
+      }, 40);
+    });
+
+    document.getElementById('settingsDone').addEventListener('click', closeSettings);
+    document.getElementById('settingsBtn').addEventListener('click', openSettings);
+    document.getElementById('settingsOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+    });
+
+    // ─────────────────────────────────────────────
+    //  Export / Import / Clear
+    // ─────────────────────────────────────────────
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const blob = new Blob(
+        [JSON.stringify({ staff, data }, null, 2)],
+        { type: 'application/json' }
+      );
+      Object.assign(document.createElement('a'), {
+        href: URL.createObjectURL(blob),
+        download: `call-calendar-${viewYear}-${viewMonth + 1}.json`
+      }).click();
+    });
+
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+
+    document.getElementById('importFile').addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        try {
+          const imported = JSON.parse(ev.target.result);
+          if (imported.data && typeof imported.data === 'object') { data = imported.data; saveData(); }
+          if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; saveStaff(); }
+          closeSettings();
+          render();
+          alert('Data imported successfully.');
+        } catch {
+          alert('Could not read file. Make sure it is a valid JSON export from this app.');
+        }
+      };
+      reader.readAsText(file);
+      e.target.value = '';
+    });
+
+    document.getElementById('clearMonthBtn').addEventListener('click', () => {
+      if (!confirm(`Clear all data for ${MONTHS[viewMonth]} ${viewYear}?`)) return;
+      const days = new Date(viewYear, viewMonth + 1, 0).getDate();
+      for (let d = 1; d <= days; d++)
+        for (const p of staff) clearCell(viewYear, viewMonth, d, p);
+      closeSettings();
+      render();
+    });
+
+    document.getElementById('clearAllBtn').addEventListener('click', () => {
+      if (!confirm('Clear ALL calendar data? This cannot be undone.')) return;
+      data = {};
+      saveData();
+      closeSettings();
+      render();
+    });
+
+    // ─────────────────────────────────────────────
+    //  Navigation
+    // ─────────────────────────────────────────────
+    document.getElementById('prevMonth').addEventListener('click', () => {
+      if (--viewMonth < 0) { viewMonth = 11; viewYear--; }
+      render();
+    });
+
+    document.getElementById('nextMonth').addEventListener('click', () => {
+      if (++viewMonth > 11) { viewMonth = 0; viewYear++; }
+      render();
+    });
+
+    document.getElementById('todayBtn').addEventListener('click', () => {
+      viewYear = today.getFullYear();
+      viewMonth = today.getMonth();
+      render();
+    });
+
+    // ─────────────────────────────────────────────
+    //  Boot
+    // ─────────────────────────────────────────────
+    render();
+  </script>
+</body>
+</html>
