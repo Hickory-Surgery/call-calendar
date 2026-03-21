@@ -1235,7 +1235,7 @@
     function personRowHtml(y, m, d, person) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
-      if (am === 'CLOSED') {
+      if (am === 'CLOSED' && oncall_am === 'none' && oncall_pm === 'none') {
         return `<div class="closed-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
