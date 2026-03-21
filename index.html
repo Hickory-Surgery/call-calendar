@@ -159,6 +159,8 @@
       gap: 4px;
     }
 
+    .wk-selects { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+
     .backup-select {
       font-size: 0.6rem;
       font-weight: 600;
@@ -169,9 +171,33 @@
       padding: 1px 2px;
       cursor: pointer;
       max-width: 52px;
-      flex-shrink: 0;
+      width: 52px;
     }
     .backup-select:focus { outline: none; border-color: #1565C0; }
+    .bari-call-select { background: rgba(165,214,167,0.55); border-color: rgba(56,142,60,0.3); }
+
+    /* ── Topbar day-summary table ── */
+    .day-summary {
+      display: grid;
+      grid-template-columns: auto auto;
+      gap: 1px 8px;
+      align-items: center;
+    }
+    .day-summary .ds-label {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: rgba(255,255,255,0.6);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      text-align: right;
+    }
+    .day-summary .ds-value {
+      font-size: 0.68rem;
+      font-weight: 600;
+      color: white;
+      white-space: nowrap;
+    }
+    .day-summary .ds-value.empty { color: rgba(255,255,255,0.3); }
 
     .cell-date { background: #CFD8DC; color: #37474F; }
 
@@ -725,6 +751,11 @@
       <span class="month-label" id="monthLabel"></span>
       <button id="nextMonth" aria-label="Next month">&#8250;</button>
     </div>
+    <div class="day-summary" id="daySummary">
+      <span class="ds-label">Call</span>     <span class="ds-value empty" id="ds-call">—</span>
+      <span class="ds-label">Backup</span>   <span class="ds-value empty" id="ds-backup">—</span>
+      <span class="ds-label">Bariatric</span><span class="ds-value empty" id="ds-bari">—</span>
+    </div>
     <div class="topbar-actions">
       <button class="icon-btn" id="todayBtn" title="Go to today">&#9711;</button>
       <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
@@ -824,6 +855,7 @@
     const STAFF_KEY     = 'callcal_staff';
     const BARIATRIC_KEY = 'callcal_bariatric';
     const BACKUP_KEY    = 'callcal_backup';
+    const BARI_CALL_KEY = 'callcal_bari_call';
 
     // ─────────────────────────────────────────────
     //  State
@@ -837,6 +869,7 @@
     let data      = loadData();
     let bariatric = loadBariatric();
     let backup    = loadBackup();
+    let bariCall  = loadBariCall();
     let editing   = null;
 
     // ─────────────────────────────────────────────
@@ -882,11 +915,38 @@
       localStorage.setItem(BACKUP_KEY, JSON.stringify(backup));
     }
 
+    function loadBariCall() {
+      try { return JSON.parse(localStorage.getItem(BARI_CALL_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveBariCall() {
+      localStorage.setItem(BARI_CALL_KEY, JSON.stringify(bariCall));
+    }
+
     function weekKey(sat) {
       // Monday of the week containing sat (sat.getDay() === 6, so mon = sat - 5)
       const mon = new Date(sat);
       mon.setDate(sat.getDate() - 5);
       return `${mon.getFullYear()}-${mon.getMonth()+1}-${mon.getDate()}`;
+    }
+
+    function todayWeekKey() {
+      // Monday of the current week, matching weekKey() convention
+      const d = new Date(today);
+      const offset = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+      d.setDate(d.getDate() - offset);
+      return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+    }
+
+    function todayDataDate() {
+      // Sunday's data lives under Saturday in our model
+      if (today.getDay() === 0) {
+        const sat = new Date(today);
+        sat.setDate(today.getDate() - 1);
+        return [sat.getFullYear(), sat.getMonth(), sat.getDate()];
+      }
+      return [today.getFullYear(), today.getMonth(), today.getDate()];
     }
 
     function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
@@ -987,9 +1047,14 @@
         const sel = e.target.closest('.backup-select');
         if (!sel) return;
         const wk = sel.dataset.wk;
-        if (sel.value) backup[wk] = sel.value;
-        else delete backup[wk];
-        saveBackup();
+        if (sel.classList.contains('bari-call-select')) {
+          if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
+          saveBariCall();
+        } else {
+          if (sel.value) backup[wk] = sel.value; else delete backup[wk];
+          saveBackup();
+        }
+        updateDaySummary();
       });
       sec.appendChild(grid);
 
@@ -1157,7 +1222,19 @@
         ? `<select class="backup-select" data-wk="${esc(wk)}">${staffOptions}</select>`
         : '';
 
-      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${backupSelect}</div>`;
+      const bariStaff = staff.filter(p => bariatric[p]);
+      const selectedBari = bariCall[wk] || '';
+      const bariOptions = `<option value=""></option>` +
+        bariStaff.map(p => `<option value="${esc(p)}"${selectedBari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
+      const bariSelect = inMonth && bariStaff.length
+        ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call">${bariOptions}</select>`
+        : '';
+
+      const dateSelects = backupSelect || bariSelect
+        ? `<span class="wk-selects">${backupSelect}${bariSelect}</span>`
+        : '';
+
+      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${dateSelects}</div>`;
       if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
@@ -1376,6 +1453,7 @@
         setCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person,
           { ...getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person), oncall_am, oncall_pm });
       }
+      updateDaySummary();
       return true;
     }
 
@@ -1734,9 +1812,42 @@
     // ─────────────────────────────────────────────
     //  Boot
     // ─────────────────────────────────────────────
+    // ─────────────────────────────────────────────
+    //  Day summary (topbar)
+    // ─────────────────────────────────────────────
+    function updateDaySummary() {
+      const [ty, tm, td] = todayDataDate();
+      const wk = todayWeekKey();
+
+      // On call: first person with any oncall set
+      const callPerson = staff.find(p => {
+        const c = getCell(ty, tm, td, p);
+        return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+      }) || '';
+
+      // Backup: first person with hosp in AM or PM
+      const backupPerson = staff.find(p => {
+        const c = getCell(ty, tm, td, p);
+        return c.am === 'hosp' || c.pm === 'hosp';
+      }) || '';
+
+      // Bariatric call: bariCall dropdown for this week
+      const bariPerson = bariCall[wk] || '';
+
+      function set(id, name) {
+        const el = document.getElementById(id);
+        el.textContent = name ? shortName(name) : '—';
+        el.className = 'ds-value' + (name ? '' : ' empty');
+      }
+      set('ds-call',   callPerson);
+      set('ds-backup', backupPerson);
+      set('ds-bari',   bariPerson);
+    }
+
     setupObservers();
     initScroll(viewYear, viewMonth);
     setupDraggableSheet();
+    updateDaySummary();
 
     // Portrait nudge dismiss
     document.getElementById('rotateNudgeDismiss').addEventListener('click', () => {
