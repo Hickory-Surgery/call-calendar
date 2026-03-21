@@ -524,6 +524,27 @@
 
     .staff-item input:focus { outline: none; border-color: #37474F; }
 
+    .bariatric-label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      color: #607D8B;
+      white-space: nowrap;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .bariatric-label input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      margin: 0;
+      accent-color: #37474F;
+      cursor: pointer;
+      flex-shrink: 0;
+      border: none;
+      padding: 0;
+    }
+
     .remove-btn {
       width: 36px;
       height: 36px;
@@ -749,7 +770,7 @@
       <button class="add-btn" id="addStaffBtn">+ Add person</button>
 
       <div class="section-label">Data</div>
-      <button class="data-btn" id="totalsBtn">&#9776; Totals</button>
+      <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
       <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
       <button class="data-btn" id="importBtn">&#8593; Import data from JSON</button>
       <button class="data-btn danger" id="clearMonthBtn">&#x2715; Clear this month's data</button>
@@ -781,8 +802,9 @@
     const ASSIGNMENTS = ['', 'ov', 'hosp', 'C-surg', 'F-surg', 'ba-C', 'ba-F', 'admin', 'unavailable', 'CLOSED'];
     const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
     const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const DATA_KEY  = 'callcal_data';
-    const STAFF_KEY = 'callcal_staff';
+    const DATA_KEY      = 'callcal_data';
+    const STAFF_KEY     = 'callcal_staff';
+    const BARIATRIC_KEY = 'callcal_bariatric';
 
     // ─────────────────────────────────────────────
     //  State
@@ -792,9 +814,10 @@
     let viewYear  = today.getFullYear();
     let viewMonth = today.getMonth();
 
-    let staff   = loadStaff();
-    let data    = loadData();
-    let editing = null;
+    let staff     = loadStaff();
+    let data      = loadData();
+    let bariatric = loadBariatric();
+    let editing   = null;
 
     // ─────────────────────────────────────────────
     //  Persistence
@@ -819,6 +842,15 @@
 
     function saveStaff() {
       localStorage.setItem(STAFF_KEY, JSON.stringify(staff));
+    }
+
+    function loadBariatric() {
+      try { return JSON.parse(localStorage.getItem(BARIATRIC_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveBariatric() {
+      localStorage.setItem(BARIATRIC_KEY, JSON.stringify(bariatric));
     }
 
     function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
@@ -1339,10 +1371,11 @@
     }
 
     function closeSettings() {
-      const inputs = document.querySelectorAll('#staffList .staff-item input');
-      staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+      syncStaffFromDOM();
+      staff = staff.filter(Boolean);
       if (!staff.length) staff = ['Person 1'];
       saveStaff();
+      saveBariatric();
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
     }
@@ -1353,15 +1386,29 @@
         <div class="staff-item" draggable="true" data-idx="${i}">
           <span class="drag-handle">&#8942;</span>
           <input type="text" value="${esc(name)}" placeholder="Name">
+          <label class="bariatric-label">
+            <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
+            Bari
+          </label>
           <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
         </div>
       `).join('');
 
+      // Bariatric checkbox toggles
+      list.querySelectorAll('.bari-check').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const item = cb.closest('.staff-item');
+          const name = item.querySelector('input[type="text"]').value.trim();
+          if (name) { bariatric[name] = cb.checked; saveBariatric(); }
+        });
+      });
+
       list.querySelectorAll('.remove-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-          const inputs = document.querySelectorAll('#staffList .staff-item input');
-          staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
-          staff.splice(parseInt(btn.dataset.idx), 1);
+          syncStaffFromDOM();
+          const removed = staff.splice(parseInt(btn.dataset.idx), 1)[0];
+          delete bariatric[removed];
+          saveBariatric();
           if (!staff.length) staff = [''];
           renderStaffList();
         });
@@ -1384,8 +1431,7 @@
           e.preventDefault();
           item.classList.remove('drag-over');
           if (!dragSrc || dragSrc === item) return;
-          const inputs = list.querySelectorAll('.staff-item input');
-          staff = Array.from(inputs).map(i => i.value.trim());
+          syncStaffFromDOM();
           const from = parseInt(dragSrc.dataset.idx);
           const to   = parseInt(item.dataset.idx);
           staff.splice(to, 0, staff.splice(from, 1)[0]);
@@ -1394,9 +1440,14 @@
       });
     }
 
+    function syncStaffFromDOM() {
+      const inputs = document.querySelectorAll('#staffList .staff-item input[type="text"]');
+      staff = Array.from(inputs).map(i => i.value.trim());
+    }
+
     document.getElementById('addStaffBtn').addEventListener('click', () => {
-      const inputs = document.querySelectorAll('#staffList .staff-item input');
-      staff = Array.from(inputs).map(i => i.value.trim()).filter(Boolean);
+      syncStaffFromDOM();
+      staff = staff.filter(Boolean);
       staff.push('');
       renderStaffList();
       setTimeout(() => {
