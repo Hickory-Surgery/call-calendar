@@ -1671,7 +1671,7 @@
     // ─────────────────────────────────────────────
     document.getElementById('exportBtn').addEventListener('click', () => {
       const blob = new Blob(
-        [JSON.stringify({ staff, data }, null, 2)],
+        [JSON.stringify({ staff, data, bariatric, bariCall }, null, 2)],
         { type: 'application/json' }
       );
       Object.assign(document.createElement('a'), {
@@ -1693,6 +1693,8 @@
           const imported = JSON.parse(ev.target.result);
           if (imported.data && typeof imported.data === 'object') { data = imported.data; saveData(); }
           if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; saveStaff(); }
+          if (imported.bariatric && typeof imported.bariatric === 'object') { bariatric = imported.bariatric; saveBariatric(); }
+          if (imported.bariCall && typeof imported.bariCall === 'object') { bariCall = imported.bariCall; saveBariCall(); }
           closeSettings();
           render();
           alert('Data imported successfully.');
