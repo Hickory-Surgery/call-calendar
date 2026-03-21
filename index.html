@@ -854,7 +854,6 @@
     const DATA_KEY      = 'callcal_data';
     const STAFF_KEY     = 'callcal_staff';
     const BARIATRIC_KEY = 'callcal_bariatric';
-    const BACKUP_KEY    = 'callcal_backup';
     const BARI_CALL_KEY = 'callcal_bari_call';
 
     // ─────────────────────────────────────────────
@@ -868,7 +867,6 @@
     let staff     = loadStaff();
     let data      = loadData();
     let bariatric = loadBariatric();
-    let backup    = loadBackup();
     let bariCall  = loadBariCall();
     let editing   = null;
 
@@ -904,15 +902,6 @@
 
     function saveBariatric() {
       localStorage.setItem(BARIATRIC_KEY, JSON.stringify(bariatric));
-    }
-
-    function loadBackup() {
-      try { return JSON.parse(localStorage.getItem(BACKUP_KEY)) || {}; }
-      catch { return {}; }
-    }
-
-    function saveBackup() {
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(backup));
     }
 
     function loadBariCall() {
@@ -1044,16 +1033,11 @@
         openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person);
       };
       grid.addEventListener('change', e => {
-        const sel = e.target.closest('.backup-select');
+        const sel = e.target.closest('.bari-call-select');
         if (!sel) return;
         const wk = sel.dataset.wk;
-        if (sel.classList.contains('bari-call-select')) {
-          if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
-          saveBariCall();
-        } else {
-          if (sel.value) backup[wk] = sel.value; else delete backup[wk];
-          saveBackup();
-        }
+        if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
+        saveBariCall();
         updateDaySummary();
       });
       sec.appendChild(grid);
@@ -1215,12 +1199,6 @@
 
       const dateStr = satIn && sunIn ? `${sd} / ${ud}` : satIn ? `${sd}` : `${ud}`;
       const wk = weekKey(sat);
-      const selectedBackup = backup[wk] || '';
-      const staffOptions = `<option value=""></option>` +
-        staff.map(p => `<option value="${esc(p)}"${selectedBackup === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
-      const backupSelect = inMonth
-        ? `<select class="backup-select" data-wk="${esc(wk)}">${staffOptions}</select>`
-        : '';
 
       const bariStaff = staff.filter(p => bariatric[p]);
       const selectedBari = bariCall[wk] || '';
@@ -1230,11 +1208,7 @@
         ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call">${bariOptions}</select>`
         : '';
 
-      const dateSelects = backupSelect || bariSelect
-        ? `<span class="wk-selects">${backupSelect}${bariSelect}</span>`
-        : '';
-
-      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${dateSelects}</div>`;
+      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
@@ -1825,11 +1799,23 @@
         return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
       }) || '';
 
-      // Backup: first person with hosp in AM or PM
-      const backupPerson = staff.find(p => {
+      // Backup: first person with hosp today; on weekends scan Mon–Fri of that week
+      let backupPerson = staff.find(p => {
         const c = getCell(ty, tm, td, p);
         return c.am === 'hosp' || c.pm === 'hosp';
       }) || '';
+      if (!backupPerson && (today.getDay() === 0 || today.getDay() === 6)) {
+        // Scan Mon–Fri of the current week
+        const mon = new Date(today);
+        mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+        for (let i = 0; i < 5 && !backupPerson; i++) {
+          const wd = new Date(mon); wd.setDate(mon.getDate() + i);
+          backupPerson = staff.find(p => {
+            const c = getCell(wd.getFullYear(), wd.getMonth(), wd.getDate(), p);
+            return c.am === 'hosp' || c.pm === 'hosp';
+          }) || '';
+        }
+      }
 
       // Bariatric call: bariCall dropdown for this week
       const bariPerson = bariCall[wk] || '';
