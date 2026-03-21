@@ -557,14 +557,15 @@
     }
     .drag-handle:active { cursor: grabbing; }
 
-    .staff-item input {
-      flex: 1;
+    .staff-item input[type="text"] {
       padding: 10px 12px;
       border: 1.5px solid #CFD8DC;
       border-radius: 8px;
       font-size: 0.9rem;
       color: #263238;
     }
+    .staff-short { flex: 0 0 64px; }
+    .staff-full  { flex: 1; min-width: 0; }
 
     .staff-item input:focus { outline: none; border-color: #37474F; }
 
@@ -855,6 +856,7 @@
     const STAFF_KEY     = 'callcal_staff';
     const BARIATRIC_KEY = 'callcal_bariatric';
     const BARI_CALL_KEY = 'callcal_bari_call';
+    const FULLNAME_KEY  = 'callcal_fullnames';
 
     // ─────────────────────────────────────────────
     //  State
@@ -866,8 +868,9 @@
 
     let staff     = loadStaff();
     let data      = loadData();
-    let bariatric = loadBariatric();
-    let bariCall  = loadBariCall();
+    let bariatric  = loadBariatric();
+    let bariCall   = loadBariCall();
+    let fullnames  = loadFullnames();
     let editing   = null;
 
     // ─────────────────────────────────────────────
@@ -902,6 +905,19 @@
 
     function saveBariatric() {
       localStorage.setItem(BARIATRIC_KEY, JSON.stringify(bariatric));
+    }
+
+    function loadFullnames() {
+      try { return JSON.parse(localStorage.getItem(FULLNAME_KEY)) || {}; }
+      catch { return {}; }
+    }
+
+    function saveFullnames() {
+      localStorage.setItem(FULLNAME_KEY, JSON.stringify(fullnames));
+    }
+
+    function displayName(shortKey) {
+      return fullnames[shortKey] || shortKey;
     }
 
     function loadBariCall() {
@@ -1552,6 +1568,7 @@
       if (!staff.length) staff = ['Person 1'];
       saveStaff();
       saveBariatric();
+      saveFullnames();
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
     }
@@ -1561,7 +1578,8 @@
       list.innerHTML = staff.map((name, i) => `
         <div class="staff-item" draggable="true" data-idx="${i}">
           <span class="drag-handle">&#8942;</span>
-          <input type="text" value="${esc(name)}" placeholder="Name">
+          <input type="text" class="staff-short" value="${esc(name)}" placeholder="Short">
+          <input type="text" class="staff-full" value="${esc(fullnames[name] || '')}" placeholder="Full name">
           <label class="bariatric-label">
             <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
             Bari
@@ -1584,6 +1602,7 @@
           syncStaffFromDOM();
           const removed = staff.splice(parseInt(btn.dataset.idx), 1)[0];
           delete bariatric[removed];
+          delete fullnames[removed];
           saveBariatric();
           if (!staff.length) staff = [''];
           renderStaffList();
@@ -1617,8 +1636,17 @@
     }
 
     function syncStaffFromDOM() {
-      const inputs = document.querySelectorAll('#staffList .staff-item input[type="text"]');
-      staff = Array.from(inputs).map(i => i.value.trim());
+      const items = document.querySelectorAll('#staffList .staff-item');
+      staff = [];
+      items.forEach(item => {
+        const short = item.querySelector('.staff-short').value.trim();
+        const full  = item.querySelector('.staff-full').value.trim();
+        staff.push(short);
+        if (short) {
+          if (full) fullnames[short] = full;
+          else delete fullnames[short];
+        }
+      });
     }
 
     document.getElementById('addStaffBtn').addEventListener('click', () => {
@@ -1708,7 +1736,7 @@
     // ─────────────────────────────────────────────
     document.getElementById('exportBtn').addEventListener('click', () => {
       const blob = new Blob(
-        [JSON.stringify({ staff, data, bariatric, bariCall }, null, 2)],
+        [JSON.stringify({ staff, data, bariatric, bariCall, fullnames }, null, 2)],
         { type: 'application/json' }
       );
       Object.assign(document.createElement('a'), {
@@ -1732,6 +1760,7 @@
           if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; saveStaff(); }
           if (imported.bariatric && typeof imported.bariatric === 'object') { bariatric = imported.bariatric; saveBariatric(); }
           if (imported.bariCall && typeof imported.bariCall === 'object') { bariCall = imported.bariCall; saveBariCall(); }
+          if (imported.fullnames && typeof imported.fullnames === 'object') { fullnames = imported.fullnames; saveFullnames(); }
           closeSettings();
           render();
           alert('Data imported successfully.');
@@ -1860,7 +1889,7 @@
 
       function set(id, name) {
         const el = document.getElementById(id);
-        el.textContent = name ? shortName(name) : '—';
+        el.textContent = name ? displayName(name) : '—';
         el.className = 'ds-value' + (name ? '' : ' empty');
       }
       set('ds-call',   callPerson);
