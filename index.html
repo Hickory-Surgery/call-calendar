@@ -580,6 +580,41 @@
     }
     .scroll-sentinel { height: 1px; }
 
+    /* ── Totals table ── */
+    .totals-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 0.88rem;
+    }
+    .totals-table th {
+      text-align: center;
+      padding: 6px 10px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #607D8B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 2px solid #D0D7DE;
+    }
+    .totals-table th:first-child { text-align: left; }
+    .totals-table td {
+      padding: 7px 10px;
+      border-bottom: 1px solid #ECEFF1;
+      text-align: center;
+      color: #37474F;
+    }
+    .totals-table td:first-child { text-align: left; font-weight: 600; }
+    .totals-table tr:last-child td { border-bottom: none; }
+    .totals-table .total-row td {
+      font-weight: 700;
+      border-top: 2px solid #D0D7DE;
+      border-bottom: none;
+      color: #263238;
+    }
+    .totals-frye  { background: #FFFDE7; }
+    .totals-cmvc  { background: #FFF3E0; }
+
     /* ── Portrait nudge (phones only) ── */
     .rotate-nudge {
       display: none;
@@ -707,7 +742,6 @@
   <!-- Settings panel -->
   <div class="sheet-overlay" id="settingsOverlay">
     <div class="sheet">
-      <div class="sheet-handle"></div>
       <div class="sheet-title">Settings</div>
 
       <div class="section-label">Staff</div>
@@ -715,6 +749,7 @@
       <button class="add-btn" id="addStaffBtn">+ Add person</button>
 
       <div class="section-label">Data</div>
+      <button class="data-btn" id="totalsBtn">&#9776; Totals</button>
       <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
       <button class="data-btn" id="importBtn">&#8593; Import data from JSON</button>
       <button class="data-btn danger" id="clearMonthBtn">&#x2715; Clear this month's data</button>
@@ -723,6 +758,17 @@
       <div class="btn-row">
         <button class="btn btn-save" id="settingsDone">Done</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Totals panel -->
+  <div class="sheet-overlay" id="totalsOverlay">
+    <div class="sheet">
+      <div class="sheet-title-row">
+        <div class="sheet-title" id="totalsTitle"></div>
+        <button class="btn-clear-inline" id="totalsDismiss" style="background:#ECEFF1;border-color:#CFD8DC;color:#37474F;">Close</button>
+      </div>
+      <div id="totalsTable"></div>
     </div>
   </div>
 
@@ -1361,6 +1407,71 @@
 
     document.getElementById('settingsDone').addEventListener('click', closeSettings);
     document.getElementById('settingsBtn').addEventListener('click', openSettings);
+
+    // ─────────────────────────────────────────────
+    //  Totals panel
+    // ─────────────────────────────────────────────
+    function openTotals() {
+      closeSettings();
+      const y = viewYear, m = viewMonth;
+      const days = new Date(y, m + 1, 0).getDate();
+
+      // Count on-call days per person
+      const rows = staff.map(person => {
+        let frye = 0, cmvc = 0;
+        for (let d = 1; d <= days; d++) {
+          const c = getCell(y, m, d, person);
+          const hasAny = c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+          const hasDbl = c.oncall_am === 'double' || c.oncall_pm === 'double';
+          if (hasAny) frye++;
+          if (hasDbl) cmvc++;
+        }
+        return { person, frye, cmvc };
+      });
+
+      const totalFrye = rows.reduce((s, r) => s + r.frye, 0);
+      const totalCmvc = rows.reduce((s, r) => s + r.cmvc, 0);
+
+      document.getElementById('totalsTitle').textContent = `Totals — ${MONTHS[m]} ${y}`;
+
+      const rowsHtml = rows.map(r => `
+        <tr>
+          <td>${esc(r.person)}</td>
+          <td class="totals-frye">${r.frye || '—'}</td>
+          <td class="totals-cmvc">${r.cmvc || '—'}</td>
+        </tr>`).join('');
+
+      document.getElementById('totalsTable').innerHTML = `
+        <table class="totals-table">
+          <thead>
+            <tr>
+              <th>Staff</th>
+              <th class="totals-frye">Frye</th>
+              <th class="totals-cmvc">CMVC</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+            <tr class="total-row">
+              <td>Total</td>
+              <td class="totals-frye">${totalFrye || '—'}</td>
+              <td class="totals-cmvc">${totalCmvc || '—'}</td>
+            </tr>
+          </tbody>
+        </table>`;
+
+      document.getElementById('totalsOverlay').classList.add('open');
+    }
+
+    function closeTotals() {
+      document.getElementById('totalsOverlay').classList.remove('open');
+    }
+
+    document.getElementById('totalsBtn').addEventListener('click', openTotals);
+    document.getElementById('totalsDismiss').addEventListener('click', closeTotals);
+    document.getElementById('totalsOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('totalsOverlay')) closeTotals();
+    });
     document.getElementById('settingsOverlay').addEventListener('click', e => {
       if (e.target === document.getElementById('settingsOverlay')) closeSettings();
     });
