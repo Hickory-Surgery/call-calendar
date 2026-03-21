@@ -1934,7 +1934,8 @@
               if (visibleBelow < THRESHOLD && sections[i + 1]) {
                 // Less than 6 rows remain — snap to next month
                 ensureHeadroom(+sections[i + 1].dataset.y, +sections[i + 1].dataset.m);
-                scrollSecToTop(sections[i + 1], 'smooth');
+                const snapTarget = sections[i + 1];
+                requestAnimationFrame(() => scrollSecToTop(snapTarget, 'smooth'));
               }
               break;
             }
