@@ -1257,7 +1257,7 @@
         <div class="cg-col-hdr">${colB}</div>`;
 
       for (const val of ASSIGNMENTS) {
-        assignHtml += `<div class="cg-label${dis}">${labelHtml(val)}</div>
+        assignHtml += `<div class="cg-label${dis}" data-asgn="${esc(val)}" style="${dis ? '' : 'cursor:pointer'}">${labelHtml(val)}</div>
           <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>
           <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>`;
       }
@@ -1270,12 +1270,12 @@
         <div class="cg-col-hdr">${colB}</div>`;
 
       for (const val of ONCALL_VALS) {
-        oncallHtml += `<div class="cg-label">${ONCALL_LABEL[val]}</div>
+        oncallHtml += `<div class="cg-label" data-oncall="${val}" style="cursor:pointer">${ONCALL_LABEL[val]}</div>
           <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>
           <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
       }
       oncallHtml += `<div class="cg-divider"></div>
-        <div class="cg-label"><u>E</u>xception</div>
+        <div class="cg-label" data-oncall="exception" style="cursor:pointer"><u>E</u>xception</div>
         <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}"></button>
         <button class="cg-btn cg-disabled"></button>`;
       oncallHtml += '</div>';
@@ -1320,6 +1320,29 @@
 
       grid.querySelector('.exception-am').addEventListener('click', () => {
         editState.exception = !editState.exception; renderChoiceGrid();
+      });
+
+      grid.querySelectorAll('.cg-label[data-asgn]').forEach(lbl => {
+        if (lbl.classList.contains('cg-disabled')) return;
+        lbl.addEventListener('click', () => {
+          const val = lbl.dataset.asgn;
+          if (val === 'CLOSED' && editing) {
+            const { y, m, d } = editing;
+            for (const p of staff) setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
+            closeEdit(); reRenderMonth(y, m); return;
+          }
+          editState.am = editState.pm = val;
+          renderChoiceGrid();
+        });
+      });
+
+      grid.querySelectorAll('.cg-label[data-oncall]').forEach(lbl => {
+        lbl.addEventListener('click', () => {
+          const val = lbl.dataset.oncall;
+          if (val === 'exception') { editState.exception = !editState.exception; }
+          else { editState.oncall_am = editState.oncall_pm = val; }
+          renderChoiceGrid();
+        });
       });
 
       grid.querySelector('.edit-save').addEventListener('click', () => {
