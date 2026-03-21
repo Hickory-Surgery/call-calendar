@@ -8,6 +8,7 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
+      --topbar-h: 56px;
       --oncall-single: #FFF176;
       --oncall-double: #FFB74D;
       --oncall-exception: #A5D6A7;
@@ -20,10 +21,18 @@
     body {
       font-family: var(--font);
       background: #F0F2F5;
+      display: flex;
+      justify-content: center;
+    }
+
+    .app {
+      width: 900px;
+      max-width: 100%;
       height: 100dvh;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      position: relative;
     }
 
     /* ── Top bar ── */
@@ -36,6 +45,9 @@
       color: white;
       flex-shrink: 0;
       gap: 8px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
     }
 
     .month-nav { display: flex; align-items: center; gap: 8px; }
@@ -84,11 +96,6 @@
 
     /* ── Calendar container ── */
     .cal-container {
-      flex: 1;
-      overflow: auto;
-      -webkit-overflow-scrolling: touch;
-      display: flex;
-      flex-direction: column;
     }
 
     /* ── Day-of-week header ── */
@@ -97,7 +104,7 @@
       grid-template-columns: var(--col);
       background: var(--header-bg);
       position: sticky;
-      top: 0;
+      top: var(--topbar-h);
       z-index: 10;
       flex-shrink: 0;
     }
@@ -120,7 +127,6 @@
       grid-template-columns: var(--col);
       gap: 1px;
       background: var(--border);
-      flex: 1;
     }
 
     /* ── Day cell ── */
@@ -149,7 +155,6 @@
     .today .cell-date { background: #1565C0; color: white; }
 
     .out-of-month .cell-date { color: #AABBCC; }
-    .out-of-month .person-row { opacity: 0.38; }
 
 
     /* ── Person row ── */
@@ -305,12 +310,20 @@
     }
 
     .sheet-handle {
-      width: 40px;
-      height: 4px;
-      background: #CCC;
+      width: 56px;
+      height: 20px;
+      margin: 0 auto 12px;
+      cursor: grab;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        #C0C8D0 3px, #C0C8D0 5px
+      );
       border-radius: 2px;
-      margin: 0 auto 14px;
+      opacity: 0.8;
     }
+    .sheet-handle:hover { opacity: 1; }
+    .sheet-handle:active { cursor: grabbing; }
 
     .sheet-title-row {
       display: flex;
@@ -550,9 +563,22 @@
     .data-btn:hover { background: #ECEFF1; }
     .data-btn.danger { color: #B71C1C; border-color: #FFCDD2; }
     .data-btn.danger:hover { background: #FFEBEE; }
+
+    .month-section { }
+    .month-heading {
+      background: #546E7A;
+      color: white;
+      padding: 6px 10px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .scroll-sentinel { height: 1px; }
   </style>
 </head>
 <body>
+
+  <div class="app">
 
   <!-- Top bar -->
   <div class="topbar">
@@ -568,16 +594,15 @@
   </div>
 
   <!-- Calendar -->
+  <div class="day-headers">
+    <div>Mon</div>
+    <div>Tue</div>
+    <div>Wed</div>
+    <div>Thu</div>
+    <div>Fri</div>
+    <div class="weekend">Sat / Sun</div>
+  </div>
   <div class="cal-container">
-    <div class="day-headers">
-      <div>Mon</div>
-      <div>Tue</div>
-      <div>Wed</div>
-      <div>Thu</div>
-      <div>Fri</div>
-      <div class="weekend">Sat / Sun</div>
-    </div>
-    <div class="cal-grid" id="calGrid"></div>
   </div>
 
   <!-- Legend -->
@@ -599,6 +624,8 @@
       Closed
     </div>
   </div>
+
+  </div><!-- /.app -->
 
   <!-- Edit modal -->
   <div class="sheet-overlay" id="editOverlay">
@@ -730,50 +757,182 @@
     }
 
     // ─────────────────────────────────────────────
-    //  Render
+    //  Multi-month scroll rendering
     // ─────────────────────────────────────────────
-    function render() {
-      document.getElementById('monthLabel').textContent =
-        `${MONTHS[viewMonth]} ${viewYear}`;
-      renderCalendar();
-    }
 
-    function renderCalendar() {
-      // Monday on or before the 1st
-      const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+    function prevMo(y, m) { return m === 0  ? { y: y-1, m: 11 } : { y, m: m-1 }; }
+    function nextMo(y, m) { return m === 11 ? { y: y+1, m: 0  } : { y, m: m+1 }; }
+
+    function buildMonthHTML(ry, rm) {
+      const firstDow = new Date(ry, rm, 1).getDay();
       const monOffset = firstDow === 0 ? 6 : firstDow - 1;
-      const cur = new Date(viewYear, viewMonth, 1 - monOffset);
-
-      // Last Sunday on or after the last day of month
-      const lastDay = new Date(viewYear, viewMonth + 1, 0);
+      const cur = new Date(ry, rm, 1 - monOffset);
+      const lastDay = new Date(ry, rm + 1, 0);
       const lastDow = lastDay.getDay();
-      const end = new Date(viewYear, viewMonth + 1, lastDow === 0 ? 0 : 7 - lastDow);
-
+      const end = new Date(ry, rm + 1, lastDow === 0 ? 0 : 7 - lastDow);
       let html = '';
       while (cur <= end) {
-        // Mon–Fri: one cell each
         for (let i = 0; i < 5; i++) {
-          html += renderDayCell(new Date(cur));
+          html += renderDayCell(new Date(cur), ry, rm);
           cur.setDate(cur.getDate() + 1);
         }
-        // Sat + Sun: one combined cell
         const sat = new Date(cur); cur.setDate(cur.getDate() + 1);
         const sun = new Date(cur); cur.setDate(cur.getDate() + 1);
-        html += renderWeekendCell(sat, sun);
+        html += renderWeekendCell(sat, sun, ry, rm);
       }
+      return html;
+    }
 
-      const grid = document.getElementById('calGrid');
-      grid.innerHTML = html;
+    let headingObserver, loadObserver, topSentinel, bottomSentinel;
+
+    function createMonthSection(y, m) {
+      const sec = document.createElement('div');
+      sec.className = 'month-section';
+      sec.id = `month-${y}-${m}`;
+      sec.dataset.y = y; sec.dataset.m = m;
+
+      const hdg = document.createElement('div');
+      hdg.className = 'month-heading';
+      hdg.textContent = `${MONTHS[m]} ${y}`;
+      sec.appendChild(hdg);
+
+      const grid = document.createElement('div');
+      grid.className = 'cal-grid';
+      grid.innerHTML = buildMonthHTML(y, m);
       grid.onclick = e => {
         const row = e.target.closest('[data-person]');
         if (!row) return;
         openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person);
       };
+      sec.appendChild(grid);
+
+      if (headingObserver) headingObserver.observe(hdg);
+      return sec;
     }
 
-    function renderDayCell(date) {
+    function reRenderMonth(y, m) {
+      const sec = document.getElementById(`month-${y}-${m}`);
+      if (!sec) return;
+      sec.querySelector('.cal-grid').innerHTML = buildMonthHTML(y, m);
+    }
+
+    function render() {
+      document.querySelectorAll('.month-section').forEach(sec => {
+        sec.querySelector('.cal-grid').innerHTML = buildMonthHTML(+sec.dataset.y, +sec.dataset.m);
+      });
+    }
+
+    function getContainer() { return document.querySelector('.cal-container'); }
+    function getApp()       { return document.querySelector('.app'); }
+
+    function appendNextMonth() {
+      const sections = getContainer().querySelectorAll('.month-section');
+      const last = sections[sections.length - 1];
+      const { y, m } = nextMo(+last.dataset.y, +last.dataset.m);
+      getContainer().insertBefore(createMonthSection(y, m), bottomSentinel);
+    }
+
+    function prependPrevMonth() {
+      const first = getContainer().querySelector('.month-section');
+      const { y, m } = prevMo(+first.dataset.y, +first.dataset.m);
+      const app = getApp();
+      const prevST = app.scrollTop;
+      const prevH  = getContainer().scrollHeight;
+      getContainer().insertBefore(createMonthSection(y, m), first);
+      app.scrollTop = prevST + (getContainer().scrollHeight - prevH);
+    }
+
+    function stickyOffset() {
+      return document.querySelector('.topbar').offsetHeight +
+             document.querySelector('.day-headers').offsetHeight;
+    }
+
+    function scrollSecToTop(sec, behavior) {
+      getApp().scrollTo({ top: sec.offsetTop - stickyOffset(), behavior });
+    }
+
+    // Append months below `y/m` until scrollTop can actually reach sec.offsetTop - stickyOffset()
+    function ensureHeadroom(y, m) {
+      const app = getApp();
+      const sec = document.getElementById(`month-${y}-${m}`);
+      if (!sec) return;
+      let guard = 0;
+      while (sec.offsetTop - stickyOffset() + app.clientHeight > app.scrollHeight && guard++ < 8) {
+        appendNextMonth();
+      }
+    }
+
+    function scrollToMonth(y, m) {
+      if (!document.getElementById(`month-${y}-${m}`)) {
+        initScroll(y, m); return;
+      }
+      ensureHeadroom(y, m);
+      scrollSecToTop(document.getElementById(`month-${y}-${m}`), 'smooth');
+    }
+
+    function initScroll(y, m) {
+      if (loadObserver) loadObserver.disconnect();
+
+      const container = getContainer();
+      container.querySelectorAll('.month-section').forEach(s => s.remove());
+      const pm = prevMo(y, m), nm = nextMo(y, m);
+      [pm, { y, m }, nm].forEach(({ y: ry, m: rm }) =>
+        container.insertBefore(createMonthSection(ry, rm), bottomSentinel)
+      );
+      viewYear = y; viewMonth = m;
+      document.getElementById('monthLabel').textContent = `${MONTHS[m]} ${y}`;
+
+      ensureHeadroom(y, m);
+      const sec = document.getElementById(`month-${y}-${m}`);
+      if (sec) scrollSecToTop(sec, 'instant');
+
+      requestAnimationFrame(() => {
+        if (loadObserver) {
+          loadObserver.observe(topSentinel);
+          loadObserver.observe(bottomSentinel);
+        }
+      });
+    }
+
+    function setupObservers() {
+      const app = getApp();
+      const container = getContainer();
+
+      topSentinel = document.createElement('div');
+      topSentinel.className = 'scroll-sentinel';
+      bottomSentinel = document.createElement('div');
+      bottomSentinel.className = 'scroll-sentinel';
+      container.prepend(topSentinel);
+      container.append(bottomSentinel);
+
+      loadObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          if (entry.target === topSentinel)    prependPrevMonth();
+          if (entry.target === bottomSentinel) appendNextMonth();
+        }
+      }, { root: app, rootMargin: '300px' });
+      loadObserver.observe(topSentinel);
+      loadObserver.observe(bottomSentinel);
+
+      headingObserver = new IntersectionObserver(entries => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const sec = entry.target.closest('.month-section');
+            if (sec) {
+              viewYear  = +sec.dataset.y;
+              viewMonth = +sec.dataset.m;
+              document.getElementById('monthLabel').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+            }
+            break;
+          }
+        }
+      }, { root: app, rootMargin: `-${56 + 30}px 0px -55% 0px` });
+    }
+
+    function renderDayCell(date, ry, rm) {
       const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
-      const inMonth = m === viewMonth && y === viewYear;
+      const inMonth = m === rm && y === ry;
       const isToday = y === today.getFullYear() && m === today.getMonth() && d === today.getDate();
 
       let cls = 'day-cell';
@@ -782,15 +941,15 @@
 
       const dateInner = d;
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
-      for (const person of staff) html += personRowHtml(y, m, d, person);
+      if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
 
-    function renderWeekendCell(sat, sun) {
+    function renderWeekendCell(sat, sun, ry, rm) {
       const sd = sat.getDate(), sm = sat.getMonth(), sy = sat.getFullYear();
       const ud = sun.getDate(), um = sun.getMonth(), uy = sun.getFullYear();
-      const satIn = sm === viewMonth && sy === viewYear;
-      const sunIn = um === viewMonth && uy === viewYear;
+      const satIn = sm === rm && sy === ry;
+      const sunIn = um === rm && uy === ry;
       const isToday = (sy === today.getFullYear() && sm === today.getMonth() && sd === today.getDate())
                    || (uy === today.getFullYear() && um === today.getMonth() && ud === today.getDate());
 
@@ -806,7 +965,7 @@
       const dateInner = dateStr;
 
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
-      for (const person of staff) html += personRowHtml(y, m, d, person);
+      if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
       return html + '</div>';
     }
 
@@ -898,7 +1057,7 @@
             for (const p of staff) {
               setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
             }
-            closeEdit(); renderCalendar(); return;
+            closeEdit(); reRenderMonth(y, m); return;
           }
           editState.am = editState.pm = btn.dataset.val;
           renderChoiceGrid();
@@ -919,7 +1078,13 @@
         editState.exception = !editState.exception; renderChoiceGrid();
       });
 
-      grid.querySelector('.edit-save').addEventListener('click',    () => { if (doSave() !== false) { closeEdit(); renderCalendar(); } });
+      grid.querySelector('.edit-save').addEventListener('click', () => {
+        if (doSave() !== false) {
+          const { y, m } = editing;
+          closeEdit();
+          reRenderMonth(y, m);
+        }
+      });
       grid.querySelector('.edit-advance').addEventListener('click', saveAndAdvance);
       grid.querySelector('.edit-cancel').addEventListener('click',  closeEdit);
     }
@@ -942,7 +1107,7 @@
 
       editState = { am: cell.am, pm: cell.pm, oncall_am: cell.oncall_am, oncall_pm: cell.oncall_pm, exception: cell.exception };
       document.getElementById('editClearBtn').onclick = () => {
-        clearCell(y, m, d, person); closeEdit(); renderCalendar();
+        clearCell(y, m, d, person); closeEdit(); reRenderMonth(y, m);
       };
       renderChoiceGrid();
       setEditHighlight(y, m, d, person);
@@ -1005,13 +1170,14 @@
       if (!editing) return;
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
+      reRenderMonth(y, m);
       const dow  = new Date(y, m, d).getDay();
       const next = dow === 5 ? new Date(y, m, d + 1)
                  : dow === 6 ? new Date(y, m, d + 2)
                  :              new Date(y, m, d + 1);
       const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
-      if (nm !== viewMonth || ny !== viewYear) { viewYear = ny; viewMonth = nm; }
-      renderCalendar();
+      if (nm !== m || ny !== y) scrollToMonth(ny, nm);
+      else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
       openEdit(ny, nm, nd, person);
     }
 
@@ -1022,7 +1188,7 @@
     document.addEventListener('keydown', e => {
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'Tab')    { e.preventDefault(); saveAndAdvance(); return; }
-      if (e.key === 'Enter')  { if (doSave() !== false) { closeEdit(); renderCalendar(); } return; }
+      if (e.key === 'Enter')  { if (doSave() !== false) { const {y,m} = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
 
       const key = e.key.toLowerCase();
@@ -1194,25 +1360,69 @@
     //  Navigation
     // ─────────────────────────────────────────────
     document.getElementById('prevMonth').addEventListener('click', () => {
-      if (--viewMonth < 0) { viewMonth = 11; viewYear--; }
-      render();
+      const { y, m } = prevMo(viewYear, viewMonth);
+      scrollToMonth(y, m);
     });
 
     document.getElementById('nextMonth').addEventListener('click', () => {
-      if (++viewMonth > 11) { viewMonth = 0; viewYear++; }
-      render();
+      const { y, m } = nextMo(viewYear, viewMonth);
+      scrollToMonth(y, m);
     });
 
     document.getElementById('todayBtn').addEventListener('click', () => {
-      viewYear = today.getFullYear();
-      viewMonth = today.getMonth();
-      render();
+      scrollToMonth(today.getFullYear(), today.getMonth());
     });
+
+    // ─────────────────────────────────────────────
+    //  Draggable edit panel
+    // ─────────────────────────────────────────────
+    function setupDraggableSheet() {
+      const overlay = document.getElementById('editOverlay');
+      const sheet   = overlay.querySelector('.sheet');
+      const handle  = sheet.querySelector('.sheet-handle');
+      let dragging = false, startX, startY, startLeft, startTop;
+
+      function beginDrag(cx, cy) {
+        const r = sheet.getBoundingClientRect();
+        startX = cx; startY = cy;
+        startLeft = r.left; startTop = r.top;
+        sheet.style.cssText += `;position:fixed;left:${r.left}px;top:${r.top}px;bottom:auto;width:${r.width}px;border-radius:16px;margin:0;max-height:90vh`;
+        dragging = true;
+      }
+      function moveDrag(cx, cy) {
+        if (!dragging) return;
+        const left = Math.max(0, Math.min(startLeft + cx - startX, window.innerWidth  - sheet.offsetWidth));
+        const top  = Math.max(0, Math.min(startTop  + cy - startY, window.innerHeight - sheet.offsetHeight));
+        sheet.style.left = left + 'px';
+        sheet.style.top  = top  + 'px';
+      }
+      function endDrag() { dragging = false; }
+
+      handle.addEventListener('mousedown',  e => { beginDrag(e.clientX, e.clientY); e.preventDefault(); });
+      document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
+      document.addEventListener('mouseup',   endDrag);
+      handle.addEventListener('touchstart', e => { beginDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
+      document.addEventListener('touchmove', e => { if (dragging) { moveDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
+      document.addEventListener('touchend', endDrag);
+
+      // Reset to bottom-sheet each time the panel opens
+      overlay.addEventListener('transitionend', () => {});
+      const origOpen = overlay.classList;
+      new MutationObserver(() => {
+        if (overlay.classList.contains('open')) {
+          sheet.style.position = '';
+          sheet.style.left = ''; sheet.style.top = ''; sheet.style.bottom = '';
+          sheet.style.width = ''; sheet.style.borderRadius = ''; sheet.style.margin = '';
+        }
+      }).observe(overlay, { attributes: true, attributeFilter: ['class'] });
+    }
 
     // ─────────────────────────────────────────────
     //  Boot
     // ─────────────────────────────────────────────
-    render();
+    setupObservers();
+    initScroll(viewYear, viewMonth);
+    setupDraggableSheet();
   </script>
 </body>
 </html>
