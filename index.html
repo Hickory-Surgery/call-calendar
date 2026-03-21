@@ -174,7 +174,7 @@
       width: 52px;
     }
     .backup-select:focus { outline: none; border-color: #1565C0; }
-    .bari-call-select { background: rgba(165,214,167,0.55); border-color: rgba(56,142,60,0.3); }
+    .bari-call-select { background: #CFD8DC; border-color: rgba(0,0,0,0.12); color: #37474F; }
 
     /* ── Topbar day-summary table ── */
     .day-summary {
@@ -1805,16 +1805,13 @@
         return c.am === 'hosp' || c.pm === 'hosp';
       }) || '';
       if (!backupPerson && (today.getDay() === 0 || today.getDay() === 6)) {
-        // Scan Mon–Fri of the current week
-        const mon = new Date(today);
-        mon.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-        for (let i = 0; i < 5 && !backupPerson; i++) {
-          const wd = new Date(mon); wd.setDate(mon.getDate() + i);
-          backupPerson = staff.find(p => {
-            const c = getCell(wd.getFullYear(), wd.getMonth(), wd.getDate(), p);
-            return c.am === 'hosp' || c.pm === 'hosp';
-          }) || '';
-        }
+        // Use preceding Friday's hosp assignment
+        const fri = new Date(today);
+        fri.setDate(today.getDate() - (today.getDay() === 6 ? 1 : 2));
+        backupPerson = staff.find(p => {
+          const c = getCell(fri.getFullYear(), fri.getMonth(), fri.getDate(), p);
+          return c.am === 'hosp' || c.pm === 'hosp';
+        }) || '';
       }
 
       // Bariatric call: bariCall dropdown for this week
