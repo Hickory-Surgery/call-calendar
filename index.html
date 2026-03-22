@@ -964,12 +964,19 @@
       border-bottom-color: #1565C0;
     }
 
+    .tab-panels {
+      display: grid;
+    }
+
     .tab-panel {
-      display: none;
+      grid-area: 1 / 1;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     .tab-panel.active {
-      display: block;
+      visibility: visible;
+      pointer-events: auto;
     }
 
     .remove-btn:disabled {
@@ -1290,35 +1297,37 @@
         <button class="tab-btn" data-tab="account">Account</button>
       </div>
 
-      <div class="tab-panel" id="tab-staff">
-        <div class="staff-list" id="staffList"></div>
-        <button class="add-btn" id="addStaffBtn">+ Add person</button>
-      </div>
-
-      <div class="tab-panel" id="tab-users">
-        <div class="users-list" id="usersList"></div>
-        <div class="add-user-row">
-          <input type="email" id="newUserEmail" placeholder="Gmail address">
-          <select id="newUserRole">
-            <option value="viewer">Viewer</option>
-            <option value="scheduler">Scheduler</option>
-            <option value="admin">Admin</option>
-          </select>
-          <button id="addUserBtn">+ Add</button>
+      <div class="tab-panels">
+        <div class="tab-panel" id="tab-staff">
+          <div class="staff-list" id="staffList"></div>
+          <button class="add-btn" id="addStaffBtn">+ Add person</button>
         </div>
-      </div>
 
-      <div class="tab-panel" id="tab-data">
-        <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
-        <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
-        <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
-        <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
-        <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
-      </div>
+        <div class="tab-panel" id="tab-users">
+          <div class="users-list" id="usersList"></div>
+          <div class="add-user-row">
+            <input type="email" id="newUserEmail" placeholder="Gmail address">
+            <select id="newUserRole">
+              <option value="viewer">Viewer</option>
+              <option value="scheduler">Scheduler</option>
+              <option value="admin">Admin</option>
+            </select>
+            <button id="addUserBtn">+ Add</button>
+          </div>
+        </div>
 
-      <div class="tab-panel" id="tab-account">
-        <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
-        <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+        <div class="tab-panel" id="tab-data">
+          <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
+          <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
+          <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
+          <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
+          <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+        </div>
+
+        <div class="tab-panel" id="tab-account">
+          <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
+          <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+        </div>
       </div>
 
       <div class="btn-row">
