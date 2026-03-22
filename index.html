@@ -2335,37 +2335,23 @@
       const { y, m, d, person } = editing;
       const { am, pm, oncall_am, oncall_pm, exception } = editState;
 
-      // Validate on-call conflicts (include Saturday if saving a Friday)
-      const isFriday = new Date(y, m, d).getDay() === 5;
-      const sat = isFriday ? new Date(y, m, d + 1) : null;
-      const [sy, sm, sd2] = sat ? [sat.getFullYear(), sat.getMonth(), sat.getDate()] : [];
-
+      // Validate on-call conflicts
       const conflicts = [];
       for (const p of staff) {
         if (p === person) continue;
         const c = getCell(y, m, d, p);
-        if (oncall_am !== 'none' && c.oncall_am !== 'none') conflicts.push({ p, col: 'AM', day: 'Fri' });
-        if (oncall_pm !== 'none' && c.oncall_pm !== 'none') conflicts.push({ p, col: 'PM', day: 'Fri' });
-        if (isFriday) {
-          const cs = getCell(sy, sm, sd2, p);
-          if (oncall_am !== 'none' && cs.oncall_am !== 'none') conflicts.push({ p, col: 'AM', day: 'Sat' });
-          if (oncall_pm !== 'none' && cs.oncall_pm !== 'none') conflicts.push({ p, col: 'PM', day: 'Sat' });
-        }
+        if (oncall_am !== 'none' && c.oncall_am !== 'none') conflicts.push({ p, col: 'AM' });
+        if (oncall_pm !== 'none' && c.oncall_pm !== 'none') conflicts.push({ p, col: 'PM' });
       }
       if (conflicts.length) {
-        const names = conflicts.map(c => `${c.p} (${c.col} ${c.day})`).join(', ');
+        const names = conflicts.map(c => `${c.p} (${c.col})`).join(', ');
         const ok = confirm(
           `On-call conflict with: ${names}.\n\nAccept to reassign call to ${person} and clear the conflict, or Cancel to go back.`
         );
         if (!ok) return false;
-        for (const { p, col, day } of conflicts) {
-          if (day === 'Sat') {
-            const cs = getCell(sy, sm, sd2, p);
-            setCell(sy, sm, sd2, p, { ...cs, [col === 'AM' ? 'oncall_am' : 'oncall_pm']: 'none' });
-          } else {
-            const c = getCell(y, m, d, p);
-            setCell(y, m, d, p, { ...c, [col === 'AM' ? 'oncall_am' : 'oncall_pm']: 'none' });
-          }
+        for (const { p, col } of conflicts) {
+          const c = getCell(y, m, d, p);
+          setCell(y, m, d, p, { ...c, [col === 'AM' ? 'oncall_am' : 'oncall_pm']: 'none' });
         }
       }
 
@@ -2390,11 +2376,6 @@
       }
 
       setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
-      if (new Date(y, m, d).getDay() === 5) {
-        const sat = new Date(y, m, d + 1);
-        setCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person,
-          { ...getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person), oncall_am, oncall_pm });
-      }
       updateDaySummary();
       return true;
     }
