@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Call Calendar">
   <link rel="manifest"
-    href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;landscape&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
+    href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
   <title>Call Calendar</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
@@ -1039,72 +1039,7 @@
       background: #FFF3E0;
     }
 
-    /* ── Portrait nudge (phones only) ── */
-    .rotate-nudge {
-      display: none;
-    }
 
-    @media screen and (max-width: 600px) and (orientation: portrait) {
-      .rotate-nudge {
-        display: flex;
-        position: fixed;
-        inset: 0;
-        z-index: 999;
-        background: #37474F;
-        color: white;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 20px;
-        padding: 32px;
-        text-align: center;
-      }
-
-      .rotate-nudge-icon {
-        font-size: 3rem;
-        animation: rotate-hint 2s ease-in-out infinite;
-      }
-
-      .rotate-nudge-title {
-        font-size: 1.1rem;
-        font-weight: 700;
-      }
-
-      .rotate-nudge-sub {
-        font-size: 0.85rem;
-        color: rgba(255, 255, 255, 0.7);
-        line-height: 1.5;
-      }
-
-      .rotate-nudge-dismiss {
-        margin-top: 8px;
-        padding: 10px 24px;
-        border: 1.5px solid rgba(255, 255, 255, 0.4);
-        border-radius: 8px;
-        background: transparent;
-        color: white;
-        font-size: 0.85rem;
-        cursor: pointer;
-      }
-
-      @keyframes rotate-hint {
-        0% {
-          transform: rotate(0deg);
-        }
-
-        30% {
-          transform: rotate(90deg);
-        }
-
-        70% {
-          transform: rotate(90deg);
-        }
-
-        100% {
-          transform: rotate(0deg);
-        }
-      }
-    }
     .users-list {
       display: flex;
       flex-direction: column;
@@ -1214,12 +1149,6 @@
     </div>
   </div>
 
-  <div class="rotate-nudge" id="rotateNudge">
-    <div class="rotate-nudge-icon">&#x21BA;</div>
-    <div class="rotate-nudge-title">Rotate your device</div>
-    <div class="rotate-nudge-sub">This calendar works best in landscape orientation.</div>
-    <button class="rotate-nudge-dismiss" id="rotateNudgeDismiss">Continue anyway</button>
-  </div>
 
   <div class="app">
 
@@ -2901,10 +2830,6 @@
       });
     })();
 
-    // Portrait nudge dismiss
-    document.getElementById('rotateNudgeDismiss').addEventListener('click', () => {
-      document.getElementById('rotateNudge').style.display = 'none';
-    });
   </script>
 </body>
 
