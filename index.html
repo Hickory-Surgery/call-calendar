@@ -1864,12 +1864,15 @@
       const sec = document.getElementById(`month-${y}-${m}`);
       if (!sec) return;
       sec.querySelector('.cal-grid').innerHTML = buildMonthHTML(y, m);
+      if (editing && editing.y === y && editing.m === m)
+        setEditHighlight(editing.y, editing.m, editing.d, editing.person);
     }
 
     function render() {
       document.querySelectorAll('.month-section').forEach(sec => {
         sec.querySelector('.cal-grid').innerHTML = buildMonthHTML(+sec.dataset.y, +sec.dataset.m);
       });
+      if (editing) setEditHighlight(editing.y, editing.m, editing.d, editing.person);
     }
 
     function getContainer() { return document.querySelector('.cal-container'); }
