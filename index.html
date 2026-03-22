@@ -2153,9 +2153,9 @@
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
-          <span class="${amCls}">${amTxt ? esc(amTxt) : weekend ? '' : '—'}</span>
+          <span class="${amCls}">${amTxt ? esc(amTxt) : weekend ? '&nbsp;' : '—'}</span>
           <span class="slot-sep"></span>
-          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : weekend ? '' : '—'}</span>
+          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : weekend ? '&nbsp;' : '—'}</span>
         </span>
       </div>`;
     }
