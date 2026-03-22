@@ -2803,8 +2803,8 @@
     // ─────────────────────────────────────────────
     (function setupScrollSnap() {
       const ROW_PX = 22;      // approx height of one person row (min-height 20px + margin 2px)
-      const ROW_COUNT = 6;       // snap when fewer than this many rows remain visible
-      const THRESHOLD = ROW_COUNT * ROW_PX;
+      const THRESHOLD_FWD = 6 * ROW_PX;   // snap forward: < 6 rows remain in current month
+      const THRESHOLD_BACK = 8 * ROW_PX;  // snap back:    < 8 rows scrolled past month top
       const DEBOUNCE = 160;     // ms to wait after scroll stops before evaluating snap
       let snapTimer = null;
 
@@ -2823,11 +2823,11 @@
               const visibleBelow = rect.bottom - sticky;  // how much remains
               const scrolledPast = sticky - rect.top;     // how much is hidden above
 
-              if (visibleBelow < THRESHOLD && sections[i + 1]) {
+              if (visibleBelow < THRESHOLD_FWD && sections[i + 1]) {
                 // Almost past this month — snap forward to next
                 ensureHeadroom(+sections[i + 1].dataset.y, +sections[i + 1].dataset.m);
                 requestAnimationFrame(() => scrollSecToTop(sections[i + 1], 'smooth'));
-              } else if (scrolledPast < THRESHOLD) {
+              } else if (scrolledPast < THRESHOLD_BACK) {
                 // Barely into this month — snap back to its top
                 requestAnimationFrame(() => scrollSecToTop(sec, 'smooth'));
               }
