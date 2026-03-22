@@ -1573,9 +1573,29 @@
       return `${mon.getFullYear()}-${mon.getMonth() + 1}-${mon.getDate()}`;
     }
 
+    // Call duties run 7:00 AM Eastern → 7:00 AM Eastern the next day.
+    // Before 7:00 AM ET the previous day's assignments still apply.
+    function callDate() {
+      const now = new Date();
+      const etHour = parseInt(
+        new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          hour: 'numeric',
+          hour12: false,
+        }).formatToParts(now).find(p => p.type === 'hour').value,
+        10
+      );
+      if (etHour < 7) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - 1);
+        return d;
+      }
+      return now;
+    }
+
     function todayWeekKey() {
-      // Monday of the current week, matching weekKey() convention
-      const d = new Date(today);
+      // Monday of the current call-day's week, matching weekKey() convention
+      const d = callDate();
       const offset = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
       d.setDate(d.getDate() - offset);
       return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
@@ -1583,12 +1603,11 @@
 
     function todayDataDate() {
       // Sunday's data lives under Saturday in our model
-      if (today.getDay() === 0) {
-        const sat = new Date(today);
-        sat.setDate(today.getDate() - 1);
-        return [sat.getFullYear(), sat.getMonth(), sat.getDate()];
+      const d = callDate();
+      if (d.getDay() === 0) {
+        d.setDate(d.getDate() - 1);
       }
-      return [today.getFullYear(), today.getMonth(), today.getDate()];
+      return [d.getFullYear(), d.getMonth(), d.getDate()];
     }
 
     function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
