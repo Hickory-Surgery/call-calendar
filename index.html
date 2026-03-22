@@ -457,6 +457,11 @@
       text-align: center;
     }
 
+    /* Weekend Sat/Sun pills are independently clickable */
+    [data-slot] {
+      cursor: pointer;
+    }
+
     .am-val {
       color: #1A237E;
     }
@@ -2048,7 +2053,8 @@
         if (e.target.closest('.backup-select')) return;
         const row = e.target.closest('[data-person]');
         if (!row) return;
-        openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person);
+        const slotEl = e.target.closest('[data-slot]');
+        openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person, slotEl ? slotEl.dataset.slot : null);
       };
       grid.addEventListener('change', e => {
         const sel = e.target.closest('.bari-call-select');
@@ -2378,9 +2384,9 @@
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
-          <span class="${amCls}">${amTxt ? esc(amTxt) : weekend ? '&nbsp;' : '—'}</span>
+          <span class="${amCls}"${weekend ? ' data-slot="am"' : ''}>${amTxt ? esc(amTxt) : weekend ? '&nbsp;' : '—'}</span>
           <span class="slot-sep"></span>
-          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : weekend ? '&nbsp;' : '—'}</span>
+          <span class="${pmCls}"${weekend ? ' data-slot="pm"' : ''}>${pmTxt ? esc(pmTxt) : weekend ? '&nbsp;' : '—'}</span>
         </span>
       </div>`;
     }
@@ -2389,6 +2395,18 @@
     //  Edit modal
     // ─────────────────────────────────────────────
     let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false };
+
+    // Apply a value to the active slot(s). On weekend slot edits, only the targeted slot changes.
+    function applySlotVal(val) {
+      const s = editing && editing.slot;
+      if (!s || s === 'am') editState.am = val;
+      if (!s || s === 'pm') editState.pm = val;
+    }
+    function applySlotOncall(val) {
+      const s = editing && editing.slot;
+      if (!s || s === 'am') editState.oncall_am = val;
+      if (!s || s === 'pm') editState.oncall_pm = val;
+    }
 
     const ONCALL_VALS = ['none', 'single', 'double'];
     const ONCALL_LABEL = { none: '<u>N</u>o call', single: '<u>S</u>ingle', double: '<u>D</u>ouble' };
@@ -2399,7 +2417,10 @@
       const isWeekend = dow === 6 || dow === 0;
       const colA = isWeekend ? 'Sat' : 'AM';
       const colB = isWeekend ? 'Sun' : 'PM';
-      const dis = isWeekend ? ' cg-disabled' : '';
+      const slot = editing && editing.slot;
+      // Per-column disable: on a weekend slot edit, disable the column not being edited
+      const disAM = (isWeekend && slot === 'pm') ? ' cg-disabled' : '';
+      const disPM = (isWeekend && slot === 'am') ? ' cg-disabled' : '';
 
       // Left column: assignment choices
       let assignHtml = `<div class="cg-grid">
@@ -2408,9 +2429,9 @@
         <div class="cg-col-hdr">${colB}</div>`;
 
       for (const val of ASSIGNMENTS) {
-        assignHtml += `<div class="cg-label${dis}" data-asgn="${esc(val)}" style="${dis ? '' : 'cursor:pointer'}">${labelHtml(val)}</div>
-          <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>
-          <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}${dis}" data-val="${esc(val)}"></button>`;
+        assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
+          <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}${disAM}" data-val="${esc(val)}"></button>
+          <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}${disPM}" data-val="${esc(val)}"></button>`;
       }
       assignHtml += '</div>';
 
@@ -2422,12 +2443,12 @@
 
       for (const val of ONCALL_VALS) {
         oncallHtml += `<div class="cg-label" data-oncall="${val}" style="cursor:pointer">${ONCALL_LABEL[val]}</div>
-          <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>
-          <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
+          <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}${disAM}" data-val="${val}"></button>
+          <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}${disPM}" data-val="${val}"></button>`;
       }
       oncallHtml += `<div class="cg-divider"></div>
         <div class="cg-label" data-oncall="exception" style="cursor:pointer"><u>E</u>xception</div>
-        <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}"></button>
+        <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}${disAM}"></button>
         <button class="cg-btn cg-disabled"></button>`;
       oncallHtml += '</div>';
 
@@ -2457,14 +2478,15 @@
 
       grid.querySelectorAll('.asgn-am').forEach(btn =>
         btn.addEventListener('click', () => {
-          if (btn.dataset.val === 'CLOSED' && editing) {
+          const val = btn.dataset.val;
+          if (val === 'CLOSED' && editing && !editing.slot) {
             const { y, m, d } = editing;
             for (const p of staff) {
               setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
             }
             closeEdit(); reRenderMonth(y, m); return;
           }
-          editState.am = editState.pm = btn.dataset.val;
+          applySlotVal(val);
           renderChoiceGrid();
         }));
 
@@ -2473,7 +2495,7 @@
 
       grid.querySelectorAll('.oncall-am').forEach(btn =>
         btn.addEventListener('click', () => {
-          editState.oncall_am = editState.oncall_pm = btn.dataset.val; renderChoiceGrid();
+          applySlotOncall(btn.dataset.val); renderChoiceGrid();
         }));
 
       grid.querySelectorAll('.oncall-pm').forEach(btn =>
@@ -2484,15 +2506,14 @@
       });
 
       grid.querySelectorAll('.cg-label[data-asgn]').forEach(lbl => {
-        if (lbl.classList.contains('cg-disabled')) return;
         lbl.addEventListener('click', () => {
           const val = lbl.dataset.asgn;
-          if (val === 'CLOSED' && editing) {
+          if (val === 'CLOSED' && editing && !editing.slot) {
             const { y, m, d } = editing;
             for (const p of staff) setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
             closeEdit(); reRenderMonth(y, m); return;
           }
-          editState.am = editState.pm = val;
+          applySlotVal(val);
           renderChoiceGrid();
         });
       });
@@ -2501,7 +2522,7 @@
         lbl.addEventListener('click', () => {
           const val = lbl.dataset.oncall;
           if (val === 'exception') { editState.exception = !editState.exception; }
-          else { editState.oncall_am = editState.oncall_pm = val; }
+          else { applySlotOncall(val); }
           renderChoiceGrid();
         });
       });
@@ -2526,13 +2547,20 @@
       });
     }
 
-    function openEdit(y, m, d, person) {
-      editing = { y, m, d, person };
+    function openEdit(y, m, d, person, slot = null) {
+      editing = { y, m, d, person, slot };
       const cell = getCell(y, m, d, person);
-      const dow = DAYS[new Date(y, m, d).getDay()];
 
-      document.getElementById('editTitle').textContent =
-        `${person} — ${dow} ${MONTHS[m]} ${d}`;
+      let titleStr;
+      if (slot === 'am') {
+        titleStr = `${person} — Sat ${MONTHS[m]} ${d}`;
+      } else if (slot === 'pm') {
+        const sun = new Date(y, m, d + 1);
+        titleStr = `${person} — Sun ${MONTHS[sun.getMonth()]} ${sun.getDate()}`;
+      } else {
+        titleStr = `${person} — ${DAYS[new Date(y, m, d).getDay()]} ${MONTHS[m]} ${d}`;
+      }
+      document.getElementById('editTitle').textContent = titleStr;
 
       editState = { am: cell.am, pm: cell.pm, oncall_am: cell.oncall_am, oncall_pm: cell.oncall_pm, exception: cell.exception };
       document.getElementById('editClearBtn').onclick = () => {
@@ -2725,21 +2753,22 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); saveAndAdvanceDown(); return; }
       if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
-      if (e.key === ' ') { e.preventDefault(); editState.am = editState.pm = ''; renderChoiceGrid(); return; }
+      if (e.key === ' ') { e.preventDefault(); applySlotVal(''); renderChoiceGrid(); return; }
 
       const key = e.key.toLowerCase();
       if (KEY_SHORTCUTS[key]) {
-        editState.am = editState.pm = KEY_SHORTCUTS[key];
+        applySlotVal(KEY_SHORTCUTS[key]);
         renderChoiceGrid();
         return;
       }
-      // 'b' cycles ba-C → ba-F → ba-C
+      // 'b' cycles ba-C → ba-F → ba-C (reads from active slot)
       if (key === 'b') {
-        editState.am = editState.pm = editState.am === 'ba-C' ? 'ba-F' : 'ba-C';
+        const curVal = (editing && editing.slot === 'pm') ? editState.pm : editState.am;
+        applySlotVal(curVal === 'ba-C' ? 'ba-F' : 'ba-C');
         renderChoiceGrid(); return;
       }
       if (key === 'n') {
-        editState.oncall_am = editState.oncall_pm = 'none';
+        applySlotOncall('none');
         renderChoiceGrid(); return;
       }
       if (key === 'e') {
@@ -2747,11 +2776,11 @@
         renderChoiceGrid(); return;
       }
       if (key === 's') {
-        editState.oncall_am = editState.oncall_pm = 'single';
+        applySlotOncall('single');
         renderChoiceGrid(); return;
       }
       if (key === 'd') {
-        editState.oncall_am = editState.oncall_pm = 'double';
+        applySlotOncall('double');
         renderChoiceGrid(); return;
       }
     });
