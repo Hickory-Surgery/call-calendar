@@ -1325,6 +1325,7 @@
       await Promise.all([fetchAssignments(), fetchBariCall()]);
       setupRealtimeSubscriptions();
       render();
+      updateDaySummary();
       loginScreen.classList.add('hidden');
       scrollToMonth(today.getFullYear(), today.getMonth());
     }
