@@ -122,9 +122,6 @@
       background: rgba(255, 255, 255, 0.28);
     }
 
-    /* ── Calendar container ── */
-    .cal-container {}
-
     /* ── Day-of-week header ── */
     .day-headers {
       display: grid;
@@ -975,8 +972,6 @@
       background: #FFEBEE;
     }
 
-    .month-section {}
-
     .month-heading {
       background: #546E7A;
       color: white;
@@ -1110,6 +1105,19 @@
         }
       }
     }
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #c62828;
+      color: #fff;
+      padding: 10px 18px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      z-index: 1000;
+      pointer-events: none;
+    }
   </style>
 </head>
 
@@ -1218,16 +1226,18 @@
     <div class="sheet">
       <div class="sheet-title">Settings</div>
 
-      <div class="section-label">Staff</div>
-      <div class="staff-list" id="staffList"></div>
-      <button class="add-btn" id="addStaffBtn">+ Add person</button>
+      <div id="staffAdminSection">
+        <div class="section-label">Staff</div>
+        <div class="staff-list" id="staffList"></div>
+        <button class="add-btn" id="addStaffBtn">+ Add person</button>
+      </div>
 
       <div class="section-label">Data</div>
       <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
       <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
-      <button class="data-btn" id="importBtn">&#8593; Import data from JSON</button>
-      <button class="data-btn danger" id="clearMonthBtn">&#x2715; Clear this month's data</button>
-      <button class="data-btn danger" id="clearAllBtn">&#x2715; Clear all data</button>
+      <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
+      <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
+      <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
 
       <div class="section-label">Account</div>
       <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
@@ -1259,6 +1269,9 @@
     // ─────────────────────────────────────────────
     let currentUser = null;
     let currentRole = 'viewer';
+    let realtimeChannel = null;
+    const canEdit = () => currentRole === 'scheduler' || currentRole === 'admin';
+    const isAdmin = () => currentRole === 'admin';
 
     const loginScreen = document.getElementById('loginScreen');
 
@@ -1284,6 +1297,10 @@
       }
       currentUser = session.user;
       currentRole = role;
+      await fetchStaff();
+      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      setupRealtimeSubscriptions();
+      render();
       loginScreen.classList.add('hidden');
     }
 
@@ -1304,6 +1321,7 @@
         // Only revert to login if we were previously signed in (genuine sign-out)
         currentUser = null;
         currentRole = 'viewer';
+        if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
         loginScreen.classList.remove('hidden');
       }
     });
@@ -1334,6 +1352,10 @@
     let bariCall = loadBariCall();
     let fullnames = loadFullnames();
     let editing = null;
+
+    let staffRows = [];
+    let staffByShortName = {};
+    let staffById = {};
 
     // ─────────────────────────────────────────────
     //  Persistence
@@ -1391,6 +1413,121 @@
       localStorage.setItem(BARI_CALL_KEY, JSON.stringify(bariCall));
     }
 
+    async function fetchStaff() {
+      const { data: rows, error } = await sb.from('staff')
+        .select('*')
+        .eq('active', true)
+        .order('sort_order');
+      console.log('[fetchStaff]', { rows, error });
+      if (error || !rows || !rows.length) return; // keep localStorage fallback
+      staffRows = rows;
+      staffByShortName = Object.fromEntries(rows.map(r => [r.short_name, r]));
+      staffById = Object.fromEntries(rows.map(r => [r.id, r]));
+      staff = rows.map(r => r.short_name);
+      bariatric = Object.fromEntries(rows.map(r => [r.short_name, r.is_bariatric]));
+      fullnames = Object.fromEntries(
+        rows.filter(r => r.display_name).map(r => [r.short_name, r.display_name])
+      );
+    }
+
+    // Converts a Supabase ISO date string ("2026-03-15") to { y, m, d }
+    // where m is 0-indexed to match JS Date / cellKey conventions.
+    function isoToDateParts(iso) {
+      const [y, mo, d] = iso.split('-').map(Number);
+      return { y, m: mo - 1, d };
+    }
+
+    // Converts (y, 0-indexed m, d) to ISO date string "2026-03-15".
+    function isoFromParts(y, m, d) {
+      return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+
+    // Converts a weekKey "2026-3-2" to ISO date string "2026-03-02".
+    function isoFromWeekKey(wk) {
+      const [y, m, d] = wk.split('-').map(Number);
+      return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    }
+
+    function showToast(msg) {
+      const t = document.createElement('div');
+      t.className = 'toast';
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    async function fetchAssignments() {
+      const { data: rows, error } = await sb.from('assignments').select('*');
+      if (error) return; // keep localStorage fallback
+      data = {};
+      for (const row of rows) {
+        const staffRow = staffById[row.person_id];
+        if (!staffRow) continue;
+        const { y, m, d } = isoToDateParts(row.date);
+        data[cellKey(y, m, d, staffRow.short_name)] = {
+          am: row.am,
+          pm: row.pm,
+          oncall_am: row.oncall_am,
+          oncall_pm: row.oncall_pm,
+          exception: row.exception,
+        };
+      }
+    }
+
+    async function fetchBariCall() {
+      const { data: rows, error } = await sb.from('bari_call').select('*');
+      if (error) return; // keep localStorage fallback
+      bariCall = {};
+      for (const row of rows) {
+        if (!row.person_id) continue;
+        const staffRow = staffById[row.person_id];
+        if (!staffRow) continue;
+        const { y, m, d } = isoToDateParts(row.week_start);
+        bariCall[`${y}-${m + 1}-${d}`] = staffRow.short_name;
+      }
+    }
+
+    function setupRealtimeSubscriptions() {
+      if (realtimeChannel) sb.removeChannel(realtimeChannel);
+      realtimeChannel = sb.channel('db-changes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'assignments' }, payload => {
+          const { eventType, new: n, old: o } = payload;
+          if (eventType === 'DELETE') {
+            const staffRow = staffById[o.person_id];
+            if (!staffRow) return;
+            const { y, m, d } = isoToDateParts(o.date);
+            delete data[cellKey(y, m, d, staffRow.short_name)];
+          } else {
+            const staffRow = staffById[n.person_id];
+            if (!staffRow) return;
+            const { y, m, d } = isoToDateParts(n.date);
+            data[cellKey(y, m, d, staffRow.short_name)] = {
+              am: n.am, pm: n.pm,
+              oncall_am: n.oncall_am, oncall_pm: n.oncall_pm,
+              exception: n.exception,
+            };
+          }
+          render();
+          updateDaySummary();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'bari_call' }, payload => {
+          const { eventType, new: n, old: o } = payload;
+          if (eventType === 'DELETE') {
+            const { y, m, d } = isoToDateParts(o.week_start);
+            delete bariCall[`${y}-${m + 1}-${d}`];
+          } else {
+            const staffRow = n.person_id ? staffById[n.person_id] : null;
+            const { y, m, d } = isoToDateParts(n.week_start);
+            const wk = `${y}-${m + 1}-${d}`;
+            if (staffRow) bariCall[wk] = staffRow.short_name;
+            else delete bariCall[wk];
+          }
+          render();
+          updateDaySummary();
+        })
+        .subscribe();
+    }
+
     function weekKey(sat) {
       // Monday of the week containing sat (sat.getDay() === 6, so mon = sat - 5)
       const mon = new Date(sat);
@@ -1431,13 +1568,47 @@
     }
 
     function setCell(y, m, d, person, val) {
-      data[cellKey(y, m, d, person)] = val;
+      const key = cellKey(y, m, d, person);
+      const prev = data[key];
+      data[key] = val;
       saveData();
+      const staffRow = staffByShortName[person];
+      if (staffRow) {
+        sb.from('assignments').upsert({
+          date: isoFromParts(y, m, d),
+          person_id: staffRow.id,
+          am: val.am, pm: val.pm,
+          oncall_am: val.oncall_am, oncall_pm: val.oncall_pm,
+          exception: val.exception,
+        }, { onConflict: 'date,person_id' }).then(({ error }) => {
+          if (error) {
+            if (prev !== undefined) data[key] = prev; else delete data[key];
+            saveData(); render();
+            showToast('Save failed — please try again.');
+          }
+        });
+      }
     }
 
     function clearCell(y, m, d, person) {
-      delete data[cellKey(y, m, d, person)];
+      const key = cellKey(y, m, d, person);
+      const prev = data[key];
+      delete data[key];
       saveData();
+      const staffRow = staffByShortName[person];
+      if (staffRow) {
+        sb.from('assignments')
+          .delete()
+          .eq('date', isoFromParts(y, m, d))
+          .eq('person_id', staffRow.id)
+          .then(({ error }) => {
+            if (error) {
+              if (prev !== undefined) data[key] = prev;
+              saveData(); render();
+              showToast('Delete failed — please try again.');
+            }
+          });
+      }
     }
 
     // ─────────────────────────────────────────────
@@ -1514,9 +1685,25 @@
         const sel = e.target.closest('.bari-call-select');
         if (!sel) return;
         const wk = sel.dataset.wk;
+        const prev = bariCall[wk];
         if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
         saveBariCall();
         updateDaySummary();
+        const weekStart = isoFromWeekKey(wk);
+        const staffRow = sel.value ? staffByShortName[sel.value] : null;
+        (async () => {
+          let error;
+          if (staffRow) {
+            ({ error } = await sb.from('bari_call').upsert({ week_start: weekStart, person_id: staffRow.id }));
+          } else {
+            ({ error } = await sb.from('bari_call').delete().eq('week_start', weekStart));
+          }
+          if (error) {
+            if (prev !== undefined) bariCall[wk] = prev; else delete bariCall[wk];
+            saveBariCall(); updateDaySummary();
+            showToast('Save failed — please try again.');
+          }
+        })();
       });
       setupGridDrag(grid);
       sec.appendChild(grid);
@@ -2110,6 +2297,11 @@
       renderStaffList();
       document.getElementById('signedInAs').textContent =
         currentUser ? `Signed in as ${currentUser.email}` : '';
+      const admin = isAdmin();
+      document.getElementById('staffAdminSection').style.display = admin ? '' : 'none';
+      document.querySelectorAll('#settingsOverlay .admin-only').forEach(el => {
+        el.style.display = admin ? '' : 'none';
+      });
       document.getElementById('settingsOverlay').classList.add('open');
     }
 
@@ -2118,12 +2310,14 @@
     });
 
     function closeSettings() {
-      syncStaffFromDOM();
-      staff = staff.filter(Boolean);
-      if (!staff.length) staff = ['Person 1'];
-      saveStaff();
-      saveBariatric();
-      saveFullnames();
+      if (isAdmin()) {
+        syncStaffFromDOM();
+        staff = staff.filter(Boolean);
+        if (!staff.length) staff = ['Person 1'];
+        saveStaff();
+        saveBariatric();
+        saveFullnames();
+      }
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
     }
