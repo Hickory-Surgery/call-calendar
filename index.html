@@ -2118,7 +2118,7 @@
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++)
-          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1], satIn, sunIn);
+          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1], satIn, sunIn, true);
       }
       return html + '</div>';
     }
@@ -2136,7 +2136,7 @@
       return first !== -1 ? [first, last] : null;
     }
 
-    function personRowHtml(y, m, d, person, inBand, amIn = true, pmIn = true) {
+    function personRowHtml(y, m, d, person, inBand, amIn = true, pmIn = true, weekend = false) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
@@ -2153,9 +2153,9 @@
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
-          <span class="${amCls}">${amTxt ? esc(amTxt) : '—'}</span>
+          <span class="${amCls}">${amTxt ? esc(amTxt) : weekend ? '' : '—'}</span>
           <span class="slot-sep"></span>
-          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : '—'}</span>
+          <span class="${pmCls}">${pmTxt ? esc(pmTxt) : weekend ? '' : '—'}</span>
         </span>
       </div>`;
     }
