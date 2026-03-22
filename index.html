@@ -1183,6 +1183,36 @@
       color: #90A4AE;
     }
 
+    /* ── Feed list ── */
+    .feed-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .feed-name {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #455A64;
+      min-width: 32px;
+    }
+
+    .feed-copy-btn {
+      flex-shrink: 0;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border: 1px solid #CFD8DC;
+      border-radius: 5px;
+      background: white;
+      color: #455A64;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .feed-copy-btn:active { background: #ECEFF1; }
+    .feed-copy-btn.copied { color: #2E7D32; border-color: #A5D6A7; }
+
     /* ── Rates form ── */
     .rates-section {
       margin-top: 14px;
@@ -1472,6 +1502,11 @@
               <input type="number" id="rateCmvcWe" class="rates-input" step="0.01" min="0" placeholder="0.00">
             </div>
             <button class="data-btn" id="saveRatesBtn">&#x2713; Save rates</button>
+          </div>
+
+          <div class="rates-section admin-only" id="feedSection">
+            <div class="rates-section-title">Calendar Subscribe Links</div>
+            <div id="feedList"></div>
           </div>
         </div>
 
@@ -2708,6 +2743,7 @@
       if (admin) {
         renderStaffList();
         fetchProfiles().then(renderUsersList);
+        renderFeedList();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
@@ -2750,6 +2786,32 @@
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
       if (isAdmin()) saveStaffToSupabase();
+    }
+
+    const ICAL_BASE = 'https://pkjlnjsswoadftkseffo.supabase.co/functions/v1/ical';
+
+    function renderFeedList() {
+      const list = document.getElementById('feedList');
+      if (!list) return;
+      list.innerHTML = staffRows.map(row => {
+        const token = row.feed_token;
+        const url = token ? `${ICAL_BASE}?person=${encodeURIComponent(row.short_name)}&token=${token}` : '';
+        return `<div class="feed-row">
+          <span class="feed-name">${esc(row.short_name)}</span>
+          <button class="feed-copy-btn" data-url="${esc(url)}" data-person="${esc(row.short_name)}"
+            ${!url ? 'disabled' : ''}>&#128279; Copy link</button>
+        </div>`;
+      }).join('');
+
+      list.querySelectorAll('.feed-copy-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(btn.dataset.url).then(() => {
+            btn.textContent = '✓ Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => { btn.textContent = '🔗 Copy link'; btn.classList.remove('copied'); }, 2000);
+          });
+        });
+      });
     }
 
     function renderStaffList() {
