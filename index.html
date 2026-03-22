@@ -343,7 +343,7 @@
     /* Hosp band: light gray spanning first→last hosp row within a day column.
        Specificity kept at 1 class so oncall colors on closed rows always win. */
     .hosp-band {
-      background: rgba(0, 0, 0, 0.04);
+      background: rgba(0, 0, 0, 0.08);
     }
 
     .editing-highlight {
@@ -448,11 +448,6 @@
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-    }
-
-    .am-val.hosp:not(.oncall-single):not(.oncall-double),
-    .pm-val.hosp:not(.oncall-single):not(.oncall-double) {
-      background: rgba(0, 0, 0, 0.08);
     }
 
     .slot-sep {
