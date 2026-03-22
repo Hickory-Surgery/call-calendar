@@ -1586,7 +1586,8 @@
       render();
       updateDaySummary();
       loginScreen.classList.add('hidden');
-      scrollToMonth(today.getFullYear(), today.getMonth());
+      const savedPos = (() => { try { return JSON.parse(sessionStorage.getItem('viewPos')); } catch { return null; } })();
+      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
     }
 
     // Initial load: check for a stored session
@@ -1625,6 +1626,7 @@
     let profileRows = [];
 
     const today = new Date();
+    history.scrollRestoration = 'manual';
 
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
@@ -2195,6 +2197,7 @@
         container.insertBefore(createMonthSection(ry, rm), bottomSentinel)
       );
       viewYear = y; viewMonth = m;
+      sessionStorage.setItem('viewPos', JSON.stringify({ y, m }));
       document.getElementById('monthLabel').textContent = `${MONTHS[m]} ${y}`;
 
       ensureHeadroom(y, m);
@@ -2237,6 +2240,7 @@
             if (sec) {
               viewYear = +sec.dataset.y;
               viewMonth = +sec.dataset.m;
+              sessionStorage.setItem('viewPos', JSON.stringify({ y: viewYear, m: viewMonth }));
               document.getElementById('monthLabel').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
             }
             break;
