@@ -1332,11 +1332,6 @@
     const ASSIGNMENTS = ['', 'ov', 'hosp', 'C-surg', 'F-surg', 'ba-C', 'ba-F', 'admin', 'unavailable', 'CLOSED'];
     const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
     const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    const DATA_KEY = 'callcal_data';
-    const STAFF_KEY = 'callcal_staff';
-    const BARIATRIC_KEY = 'callcal_bariatric';
-    const BARI_CALL_KEY = 'callcal_bari_call';
-    const FULLNAME_KEY = 'callcal_fullnames';
 
     // ─────────────────────────────────────────────
     //  State
@@ -1346,11 +1341,11 @@
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
 
-    let staff = loadStaff();
-    let data = loadData();
-    let bariatric = loadBariatric();
-    let bariCall = loadBariCall();
-    let fullnames = loadFullnames();
+    let staff = [];
+    let data = {};
+    let bariatric = {};
+    let bariCall = {};
+    let fullnames = {};
     let editing = null;
 
     let staffRows = [];
@@ -1360,57 +1355,8 @@
     // ─────────────────────────────────────────────
     //  Persistence
     // ─────────────────────────────────────────────
-    function loadData() {
-      try { return JSON.parse(localStorage.getItem(DATA_KEY)) || {}; }
-      catch { return {}; }
-    }
-
-    function saveData() {
-      localStorage.setItem(DATA_KEY, JSON.stringify(data));
-    }
-
-    function loadStaff() {
-      try {
-        const s = JSON.parse(localStorage.getItem(STAFF_KEY));
-        return Array.isArray(s) && s.length ? s : ['Person 1', 'Person 2', 'Person 3'];
-      } catch {
-        return ['Person 1', 'Person 2', 'Person 3'];
-      }
-    }
-
-    function saveStaff() {
-      localStorage.setItem(STAFF_KEY, JSON.stringify(staff));
-    }
-
-    function loadBariatric() {
-      try { return JSON.parse(localStorage.getItem(BARIATRIC_KEY)) || {}; }
-      catch { return {}; }
-    }
-
-    function saveBariatric() {
-      localStorage.setItem(BARIATRIC_KEY, JSON.stringify(bariatric));
-    }
-
-    function loadFullnames() {
-      try { return JSON.parse(localStorage.getItem(FULLNAME_KEY)) || {}; }
-      catch { return {}; }
-    }
-
-    function saveFullnames() {
-      localStorage.setItem(FULLNAME_KEY, JSON.stringify(fullnames));
-    }
-
     function displayName(shortKey) {
       return fullnames[shortKey] || shortKey;
-    }
-
-    function loadBariCall() {
-      try { return JSON.parse(localStorage.getItem(BARI_CALL_KEY)) || {}; }
-      catch { return {}; }
-    }
-
-    function saveBariCall() {
-      localStorage.setItem(BARI_CALL_KEY, JSON.stringify(bariCall));
     }
 
     async function fetchStaff() {
@@ -1570,7 +1516,6 @@
       const key = cellKey(y, m, d, person);
       const prev = data[key];
       data[key] = val;
-      saveData();
       const staffRow = staffByShortName[person];
       if (staffRow) {
         sb.from('assignments').upsert({
@@ -1582,7 +1527,7 @@
         }, { onConflict: 'date,person_id' }).then(({ error }) => {
           if (error) {
             if (prev !== undefined) data[key] = prev; else delete data[key];
-            saveData(); render();
+            render();
             showToast('Save failed — please try again.');
           }
         });
@@ -1593,7 +1538,6 @@
       const key = cellKey(y, m, d, person);
       const prev = data[key];
       delete data[key];
-      saveData();
       const staffRow = staffByShortName[person];
       if (staffRow) {
         sb.from('assignments')
@@ -1603,7 +1547,7 @@
           .then(({ error }) => {
             if (error) {
               if (prev !== undefined) data[key] = prev;
-              saveData(); render();
+              render();
               showToast('Delete failed — please try again.');
             }
           });
@@ -1686,7 +1630,6 @@
         const wk = sel.dataset.wk;
         const prev = bariCall[wk];
         if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
-        saveBariCall();
         updateDaySummary();
         const weekStart = isoFromWeekKey(wk);
         const staffRow = sel.value ? staffByShortName[sel.value] : null;
@@ -1699,7 +1642,7 @@
           }
           if (error) {
             if (prev !== undefined) bariCall[wk] = prev; else delete bariCall[wk];
-            saveBariCall(); updateDaySummary();
+            updateDaySummary();
             showToast('Save failed — please try again.');
           }
         })();
@@ -2313,9 +2256,6 @@
         syncStaffFromDOM();
         staff = staff.filter(Boolean);
         if (!staff.length) staff = ['Person 1'];
-        saveStaff();
-        saveBariatric();
-        saveFullnames();
       }
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
@@ -2341,7 +2281,7 @@
         cb.addEventListener('change', () => {
           const item = cb.closest('.staff-item');
           const name = item.querySelector('input[type="text"]').value.trim();
-          if (name) { bariatric[name] = cb.checked; saveBariatric(); }
+          if (name) { bariatric[name] = cb.checked; }
         });
       });
 
@@ -2351,7 +2291,6 @@
           const removed = staff.splice(parseInt(btn.dataset.idx), 1)[0];
           delete bariatric[removed];
           delete fullnames[removed];
-          saveBariatric();
           if (!staff.length) staff = [''];
           renderStaffList();
         });
@@ -2504,11 +2443,11 @@
       reader.onload = ev => {
         try {
           const imported = JSON.parse(ev.target.result);
-          if (imported.data && typeof imported.data === 'object') { data = imported.data; saveData(); }
-          if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; saveStaff(); }
-          if (imported.bariatric && typeof imported.bariatric === 'object') { bariatric = imported.bariatric; saveBariatric(); }
-          if (imported.bariCall && typeof imported.bariCall === 'object') { bariCall = imported.bariCall; saveBariCall(); }
-          if (imported.fullnames && typeof imported.fullnames === 'object') { fullnames = imported.fullnames; saveFullnames(); }
+          if (imported.data && typeof imported.data === 'object') { data = imported.data; }
+          if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; }
+          if (imported.bariatric && typeof imported.bariatric === 'object') { bariatric = imported.bariatric; }
+          if (imported.bariCall && typeof imported.bariCall === 'object') { bariCall = imported.bariCall; }
+          if (imported.fullnames && typeof imported.fullnames === 'object') { fullnames = imported.fullnames; }
           closeSettings();
           render();
           alert('Data imported successfully.');
@@ -2532,9 +2471,15 @@
     document.getElementById('clearAllBtn').addEventListener('click', () => {
       if (!confirm('Clear ALL calendar data? This cannot be undone.')) return;
       data = {};
-      saveData();
+      bariCall = {};
       closeSettings();
       render();
+      sb.from('assignments').delete().not('id', 'is', null).then(({ error }) => {
+        if (error) showToast('Clear failed — please try again.');
+      });
+      sb.from('bari_call').delete().not('week_start', 'is', null).then(({ error }) => {
+        if (error) showToast('Clear failed — please try again.');
+      });
     });
 
     // ─────────────────────────────────────────────
