@@ -1116,8 +1116,12 @@
       background: #FFF3E0;
     }
 
-    .totals-dollars {
-      background: #F1F8E9;
+    .totals-frye-dollars {
+      background: #F9FBE7;
+    }
+
+    .totals-cmvc-dollars {
+      background: #FBE9E7;
     }
 
     /* ── Rates form ── */
@@ -2818,22 +2822,23 @@
       if (admin) rates = await fetchCurrentRates();
 
       const fmt = v => v === 0 ? '—' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const calcDollars = r => r.wd_frye * rates.frye_weekday + r.we_frye * rates.frye_weekend
-        + r.wd_cmvc * rates.cmvc_weekday + r.we_cmvc * rates.cmvc_weekend;
+      const calcFryeDollars = r => r.wd_frye * rates.frye_weekday + r.we_frye * rates.frye_weekend;
+      const calcCmvcDollars = r => r.wd_cmvc * rates.cmvc_weekday + r.we_cmvc * rates.cmvc_weekend;
 
       document.getElementById('totalsTitle').textContent = `Totals — ${MONTHS[m]} ${y}`;
 
       const rowsHtml = rows.map(r => {
-        const dollars = admin ? calcDollars(r) : 0;
         return `<tr>
           <td>${esc(r.person)}</td>
           <td class="totals-frye">${r.frye || '—'}</td>
           <td class="totals-cmvc">${r.cmvc || '—'}</td>
-          ${admin ? `<td class="totals-dollars">${fmt(dollars)}</td>` : ''}
+          ${admin ? `<td class="totals-frye-dollars">${fmt(calcFryeDollars(r))}</td>` : ''}
+          ${admin ? `<td class="totals-cmvc-dollars">${fmt(calcCmvcDollars(r))}</td>` : ''}
         </tr>`;
       }).join('');
 
-      const totalDollars = admin ? rows.reduce((s, r) => s + calcDollars(r), 0) : 0;
+      const totalFryeDollars = admin ? rows.reduce((s, r) => s + calcFryeDollars(r), 0) : 0;
+      const totalCmvcDollars = admin ? rows.reduce((s, r) => s + calcCmvcDollars(r), 0) : 0;
 
       document.getElementById('totalsTable').innerHTML = `
         <table class="totals-table">
@@ -2842,7 +2847,8 @@
               <th>Staff</th>
               <th class="totals-frye">Frye</th>
               <th class="totals-cmvc">CMVC</th>
-              ${admin ? '<th class="totals-dollars">$</th>' : ''}
+              ${admin ? '<th class="totals-frye-dollars">Frye $</th>' : ''}
+              ${admin ? '<th class="totals-cmvc-dollars">CMVC $</th>' : ''}
             </tr>
           </thead>
           <tbody>
@@ -2851,7 +2857,8 @@
               <td>Total</td>
               <td class="totals-frye">${totalFrye || '—'}</td>
               <td class="totals-cmvc">${totalCmvc || '—'}</td>
-              ${admin ? `<td class="totals-dollars">${fmt(totalDollars)}</td>` : ''}
+              ${admin ? `<td class="totals-frye-dollars">${fmt(totalFryeDollars)}</td>` : ''}
+              ${admin ? `<td class="totals-cmvc-dollars">${fmt(totalCmvcDollars)}</td>` : ''}
             </tr>
           </tbody>
         </table>`;
