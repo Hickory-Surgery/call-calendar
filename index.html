@@ -1418,7 +1418,6 @@
         .select('*')
         .eq('active', true)
         .order('sort_order');
-      console.log('[fetchStaff]', { rows, error });
       if (error || !rows || !rows.length) return; // keep localStorage fallback
       staffRows = rows;
       staffByShortName = Object.fromEntries(rows.map(r => [r.short_name, r]));
