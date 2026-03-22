@@ -1394,6 +1394,7 @@
       setupRealtimeSubscriptions();
       render();
       loginScreen.classList.add('hidden');
+      scrollToMonth(today.getFullYear(), today.getMonth());
     }
 
     // Initial load: check for a stored session
