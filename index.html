@@ -2804,7 +2804,7 @@
     (function setupScrollSnap() {
       const ROW_PX = 22;      // approx height of one person row (min-height 20px + margin 2px)
       const THRESHOLD_FWD = 6 * ROW_PX;   // snap forward: < 6 rows remain in current month
-      const THRESHOLD_BACK = 8 * ROW_PX;  // snap back:    < 8 rows scrolled past month top
+      const THRESHOLD_BACK = 2 * ROW_PX;  // snap back:    < 2 rows scrolled past month top
       const DEBOUNCE = 160;     // ms to wait after scroll stops before evaluating snap
       let snapTimer = null;
 
