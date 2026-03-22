@@ -1574,6 +1574,8 @@
     let staffRows = [];
     let staffByShortName = {};
     let staffById = {};
+    const undoStack = [];
+    const UNDO_LIMIT = 20;
 
     // ─────────────────────────────────────────────
     //  Persistence
@@ -1829,6 +1831,8 @@
     function setCell(y, m, d, person, val) {
       const key = cellKey(y, m, d, person);
       const prev = data[key];
+      undoStack.push({ y, m, d, person, prev });
+      if (undoStack.length > UNDO_LIMIT) undoStack.shift();
       data[key] = val;
       const staffRow = staffByShortName[person];
       if (staffRow) {
@@ -1851,6 +1855,8 @@
     function clearCell(y, m, d, person) {
       const key = cellKey(y, m, d, person);
       const prev = data[key];
+      undoStack.push({ y, m, d, person, prev });
+      if (undoStack.length > UNDO_LIMIT) undoStack.shift();
       delete data[key];
       const staffRow = staffByShortName[person];
       if (staffRow) {
@@ -2543,7 +2549,50 @@
       if (e.target === document.getElementById('editOverlay')) closeEdit();
     });
 
+    function undoLastChange() {
+      if (!undoStack.length) { showToast('Nothing to undo.'); return; }
+      const { y, m, d, person, prev } = undoStack.pop();
+      const key = cellKey(y, m, d, person);
+      // Restore previous state without pushing to undo stack again
+      if (prev !== undefined) {
+        data[key] = prev;
+        const staffRow = staffByShortName[person];
+        if (staffRow) {
+          sb.from('assignments').upsert({
+            date: isoFromParts(y, m, d), person_id: staffRow.id,
+            am: prev.am, pm: prev.pm,
+            oncall_am: prev.oncall_am, oncall_pm: prev.oncall_pm,
+            exception: prev.exception,
+          }, { onConflict: 'date,person_id' }).then(({ error }) => {
+            if (error) showToast('Undo failed — please try again.');
+          });
+        }
+      } else {
+        delete data[key];
+        const staffRow = staffByShortName[person];
+        if (staffRow) {
+          sb.from('assignments').delete()
+            .eq('date', isoFromParts(y, m, d))
+            .eq('person_id', staffRow.id)
+            .then(({ error }) => {
+              if (error) showToast('Undo failed — please try again.');
+            });
+        }
+      }
+      reRenderMonth(y, m);
+      showToast(`Undid change to ${person}.`);
+    }
+
     document.addEventListener('keydown', e => {
+      // CMD+Z / Ctrl+Z — undo, works any time editing is not capturing text
+      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+          e.preventDefault();
+          undoLastChange();
+          return;
+        }
+      }
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); saveAndAdvance(); return; }
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); saveAndRetreat(); return; }
