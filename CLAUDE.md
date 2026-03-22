@@ -49,6 +49,18 @@ After `fetchStaff()`, three parallel structures are maintained:
 
 `currentRole` is `'viewer'` | `'scheduler'` | `'admin'`. Guards: `canEdit()` and `isAdmin()`. New users require manual approval — an admin must insert a row into the `profiles` table (or use the Users panel in settings, which calls the `create_profile` RPC).
 
+## Auth
+
+Google OAuth via Supabase PKCE. `redirectTo` uses `window.location.origin + window.location.pathname` (not `href`) to avoid stale hash fragments corrupting the code exchange on mobile. `applySession()` is guarded by `sessionApplied` to prevent double-load when both `getSession()` and `onAuthStateChange` fire on redirect return. The flag resets on sign-out.
+
+## Scroll snap
+
+After scroll ends (160 ms debounce), the section straddling the sticky header is inspected:
+- `visibleBelow < 6 rows` → snap forward to next month
+- `scrolledPast < 8 rows` → snap back to top of current month
+
+Thresholds are `THRESHOLD_FWD` (6 × 22 px) and `THRESHOLD_BACK` (8 × 22 px) in `setupScrollSnap()`.
+
 ## Historical data import (`convert_sheets.py`)
 
 Reads the HSC Call Google Sheets spreadsheet via the Sheets API (no external Python libraries — uses `urllib` only) and outputs `call-calendar-import.json` for in-app import.
