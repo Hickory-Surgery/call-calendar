@@ -2636,6 +2636,73 @@
       }).click();
     });
 
+    async function importToSupabase(imported) {
+      // 1. Staff — upsert existing by short_name, insert new, soft-delete removed
+      if (Array.isArray(imported.staff) && imported.staff.length) {
+        const importedBariatric = imported.bariatric || {};
+        const importedFullnames = imported.fullnames || {};
+        for (let i = 0; i < imported.staff.length; i++) {
+          const short = imported.staff[i];
+          if (!short) continue;
+          const existing = staffByShortName[short];
+          if (existing) {
+            await sb.from('staff').update({
+              display_name: importedFullnames[short] || short,
+              is_bariatric: !!importedBariatric[short],
+              sort_order: i, active: true,
+            }).eq('id', existing.id);
+          } else {
+            await sb.from('staff').insert({
+              short_name: short,
+              display_name: importedFullnames[short] || short,
+              is_bariatric: !!importedBariatric[short],
+              sort_order: i, active: true,
+            });
+          }
+        }
+        for (const row of staffRows) {
+          if (!imported.staff.includes(row.short_name)) {
+            await sb.from('staff').update({ active: false }).eq('id', row.id);
+          }
+        }
+        await fetchStaff();
+      }
+
+      // 2. Assignments — delete all, bulk insert from imported data
+      if (imported.data && typeof imported.data === 'object') {
+        await sb.from('assignments').delete().not('id', 'is', null);
+        const rows = [];
+        for (const [key, val] of Object.entries(imported.data)) {
+          const parts = key.split('-');
+          const person = parts.slice(3).join('-');
+          const y = parseInt(parts[0]), m = parseInt(parts[1]) - 1, d = parseInt(parts[2]);
+          const staffRow = staffByShortName[person];
+          if (!staffRow) continue;
+          rows.push({
+            date: isoFromParts(y, m, d), person_id: staffRow.id,
+            am: val.am || '', pm: val.pm || '',
+            oncall_am: val.oncall_am || 'none', oncall_pm: val.oncall_pm || 'none',
+            exception: val.exception || false,
+          });
+        }
+        if (rows.length) await sb.from('assignments').insert(rows);
+      }
+
+      // 3. BariCall — delete all, bulk insert from imported data
+      if (imported.bariCall && typeof imported.bariCall === 'object') {
+        await sb.from('bari_call').delete().not('week_start', 'is', null);
+        const rows = [];
+        for (const [wk, personShort] of Object.entries(imported.bariCall)) {
+          const staffRow = staffByShortName[personShort];
+          if (!staffRow) continue;
+          rows.push({ week_start: isoFromWeekKey(wk), person_id: staffRow.id });
+        }
+        if (rows.length) await sb.from('bari_call').insert(rows);
+      }
+
+      await Promise.all([fetchAssignments(), fetchBariCall()]);
+    }
+
     document.getElementById('importBtn').addEventListener('click', () => {
       document.getElementById('importFile').click();
     });
@@ -2647,14 +2714,11 @@
       reader.onload = ev => {
         try {
           const imported = JSON.parse(ev.target.result);
-          if (imported.data && typeof imported.data === 'object') { data = imported.data; }
-          if (Array.isArray(imported.staff) && imported.staff.length) { staff = imported.staff; }
-          if (imported.bariatric && typeof imported.bariatric === 'object') { bariatric = imported.bariatric; }
-          if (imported.bariCall && typeof imported.bariCall === 'object') { bariCall = imported.bariCall; }
-          if (imported.fullnames && typeof imported.fullnames === 'object') { fullnames = imported.fullnames; }
           closeSettings();
-          render();
-          alert('Data imported successfully.');
+          importToSupabase(imported).then(() => {
+            render();
+            alert('Data imported successfully.');
+          }).catch(() => showToast('Import failed — please try again.'));
         } catch {
           alert('Could not read file. Make sure it is a valid JSON export from this app.');
         }
