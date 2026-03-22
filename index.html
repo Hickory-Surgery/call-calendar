@@ -1291,6 +1291,7 @@
     let currentUser = null;
     let currentRole = 'viewer';
     let realtimeChannel = null;
+    let sessionApplied = false;
     const canEdit = () => currentRole === 'scheduler' || currentRole === 'admin';
     const isAdmin = () => currentRole === 'admin';
 
@@ -1299,7 +1300,7 @@
     document.getElementById('btnGoogleSignIn').addEventListener('click', () => {
       sb.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.href }
+        options: { redirectTo: window.location.origin + window.location.pathname }
       });
     });
 
@@ -1309,6 +1310,8 @@
     }
 
     async function applySession(session) {
+      if (sessionApplied) return;
+      sessionApplied = true;
       const role = await fetchRole(session.user.id);
       if (!role) {
         await sb.auth.signOut();
@@ -1343,6 +1346,7 @@
         // Only revert to login if we were previously signed in (genuine sign-out)
         currentUser = null;
         currentRole = 'viewer';
+        sessionApplied = false;
         if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
         loginScreen.classList.remove('hidden');
       }
