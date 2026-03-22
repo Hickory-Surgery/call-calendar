@@ -662,6 +662,28 @@
       background: #FFCDD2;
     }
 
+    /* ── Edit keyboard hints ── */
+    .edit-hints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid #ECEFF1;
+      font-size: 0.7rem;
+      color: #90A4AE;
+    }
+
+    .edit-hints kbd {
+      font-family: inherit;
+      font-size: 0.68rem;
+      background: #ECEFF1;
+      border: 1px solid #CFD8DC;
+      border-radius: 3px;
+      padding: 0 4px;
+      color: #546E7A;
+    }
+
     /* ── Edit panel two-column layout ── */
     .edit-layout {
       display: flex;
@@ -2331,10 +2353,18 @@
         <button class="btn btn-advance edit-advance-down">Save &#8595;</button>
       </div>`;
 
+      const hintsHtml = `<div class="edit-hints">
+        <span><kbd>Space</kbd> none</span>
+        <span><kbd>→</kbd> save &amp; next</span>
+        <span><kbd>↓</kbd> save &amp; down</span>
+        <span><kbd>Enter</kbd> save</span>
+        <span><kbd>Esc</kbd> cancel</span>
+      </div>`;
+
       const html = `<div class="edit-layout">
         <div class="assign-col">${assignHtml}</div>
         <div class="right-col">${oncallHtml}${actionsHtml}</div>
-      </div>`;
+      </div>${hintsHtml}`;
 
       const grid = document.getElementById('choiceGrid');
       grid.innerHTML = html;
@@ -2609,6 +2639,7 @@
       if (e.key === 'ArrowDown') { e.preventDefault(); saveAndAdvanceDown(); return; }
       if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
+      if (e.key === ' ') { e.preventDefault(); editState.am = editState.pm = ''; renderChoiceGrid(); return; }
 
       const key = e.key.toLowerCase();
       if (KEY_SHORTCUTS[key]) {
