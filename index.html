@@ -1124,6 +1124,41 @@
       background: #FBE9E7;
     }
 
+    .detail-toggle {
+      font-size: 0.7rem;
+      color: #90A4AE;
+      cursor: pointer;
+      margin-left: 6px;
+      user-select: none;
+    }
+
+    .details-row { display: none; }
+    .details-row.open { display: table-row; }
+
+    .details-row td {
+      padding: 4px 10px 10px 18px;
+      font-size: 0.75rem;
+      color: #546E7A;
+      background: #FAFAFA;
+      border-bottom: 1px solid #ECEFF1;
+    }
+
+    .details-line {
+      display: flex;
+      gap: 6px;
+      align-items: baseline;
+      padding: 1px 0;
+    }
+
+    .details-label {
+      font-weight: 700;
+      min-width: 36px;
+    }
+
+    .details-eq {
+      color: #90A4AE;
+    }
+
     /* ── Rates form ── */
     .rates-section {
       margin-top: 14px;
@@ -2822,18 +2857,40 @@
       if (admin) rates = await fetchCurrentRates();
 
       const fmt = v => v === 0 ? '—' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const fmtRate = v => '$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const calcFryeDollars = r => r.wd_frye * rates.frye_weekday + r.we_frye * rates.frye_weekend;
       const calcCmvcDollars = r => r.wd_cmvc * rates.cmvc_weekday + r.we_cmvc * rates.cmvc_weekend;
+      const colspan = admin ? 5 : 3;
+
+      // Build a human-readable calculation string, skipping zero terms.
+      function calcDetail(wdCount, wdRate, weCount, weRate) {
+        const terms = [];
+        if (wdCount) terms.push(`${wdCount} wd × ${fmtRate(wdRate)}`);
+        if (weCount) terms.push(`${weCount} we × ${fmtRate(weRate)}`);
+        if (!terms.length) return '—';
+        const total = wdCount * wdRate + weCount * weRate;
+        return terms.join(' + ') + ` = ${fmtRate(total)}`;
+      }
 
       document.getElementById('totalsTitle').textContent = `Totals — ${MONTHS[m]} ${y}`;
 
-      const rowsHtml = rows.map(r => {
+      const rowsHtml = rows.map((r, i) => {
+        const detailId = `detail-row-${i}`;
+        const toggleId = `detail-toggle-${i}`;
+        const fryeDetail = admin ? calcDetail(r.wd_frye, rates.frye_weekday, r.we_frye, rates.frye_weekend) : '';
+        const cmvcDetail = admin ? calcDetail(r.wd_cmvc, rates.cmvc_weekday, r.we_cmvc, rates.cmvc_weekend) : '';
         return `<tr>
-          <td>${esc(r.person)}</td>
+          <td>${esc(r.person)}${admin ? `<span class="detail-toggle" id="${toggleId}" data-target="${detailId}">▸ details</span>` : ''}</td>
           <td class="totals-frye">${r.frye || '—'}</td>
           <td class="totals-cmvc">${r.cmvc || '—'}</td>
           ${admin ? `<td class="totals-frye-dollars">${fmt(calcFryeDollars(r))}</td>` : ''}
           ${admin ? `<td class="totals-cmvc-dollars">${fmt(calcCmvcDollars(r))}</td>` : ''}
+        </tr>
+        <tr class="details-row" id="${detailId}">
+          <td colspan="${colspan}">
+            <div class="details-line"><span class="details-label">Frye:</span><span>${fryeDetail}</span></div>
+            <div class="details-line"><span class="details-label">CMVC:</span><span>${cmvcDetail}</span></div>
+          </td>
         </tr>`;
       }).join('');
 
@@ -2862,6 +2919,15 @@
             </tr>
           </tbody>
         </table>`;
+
+      // Wire up detail toggles
+      document.getElementById('totalsTable').querySelectorAll('.detail-toggle').forEach(toggle => {
+        toggle.addEventListener('click', () => {
+          const row = document.getElementById(toggle.dataset.target);
+          const open = row.classList.toggle('open');
+          toggle.textContent = open ? '▾ details' : '▸ details';
+        });
+      });
 
       document.getElementById('totalsOverlay').classList.add('open');
     }
