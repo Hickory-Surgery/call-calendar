@@ -2679,15 +2679,31 @@
       const y = viewYear, m = viewMonth;
       const days = new Date(y, m + 1, 0).getDate();
 
-      // Count on-call days per person
+      // Count on-call days per person.
+      // Weekdays (Mon–Fri): AM+PM together = 1 day.
+      // Saturday: oncall_am only = 1 day.
+      // Sunday: oncall_pm from Saturday's cell = 1 day.
       const rows = staff.map(person => {
         let frye = 0, cmvc = 0;
         for (let d = 1; d <= days; d++) {
-          const c = getCell(y, m, d, person);
-          const hasAny = c.oncall_am !== 'none' || c.oncall_pm !== 'none';
-          const hasDbl = c.oncall_am === 'double' || c.oncall_pm === 'double';
-          if (hasAny) frye++;
-          if (hasDbl) cmvc++;
+          const dow = new Date(y, m, d).getDay();
+          if (dow === 0) {
+            // Sunday — data lives in Saturday's cell (may be prev month)
+            const sat = new Date(y, m, d - 1);
+            const c = getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person);
+            if (c.oncall_pm !== 'none') frye++;
+            if (c.oncall_pm === 'double') cmvc++;
+          } else if (dow === 6) {
+            // Saturday — am slot only
+            const c = getCell(y, m, d, person);
+            if (c.oncall_am !== 'none') frye++;
+            if (c.oncall_am === 'double') cmvc++;
+          } else {
+            // Weekday — am+pm together = 1 day
+            const c = getCell(y, m, d, person);
+            if (c.oncall_am !== 'none' || c.oncall_pm !== 'none') frye++;
+            if (c.oncall_am === 'double' || c.oncall_pm === 'double') cmvc++;
+          }
         }
         return { person, frye, cmvc };
       });
