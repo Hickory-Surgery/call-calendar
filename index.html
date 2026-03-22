@@ -1105,6 +1105,84 @@
         }
       }
     }
+    .users-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .user-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .user-email {
+      flex: 1;
+      font-size: 0.85rem;
+      color: #263238;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .role-select {
+      padding: 7px 6px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #263238;
+      background: white;
+      flex-shrink: 0;
+    }
+
+    .add-user-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+
+    .add-user-row input[type="email"] {
+      flex: 1;
+      padding: 8px 8px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      color: #263238;
+      min-width: 0;
+    }
+
+    .add-user-row input[type="email"]:focus {
+      outline: none;
+      border-color: #37474F;
+    }
+
+    .add-user-row select {
+      padding: 7px 6px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: #263238;
+      background: white;
+      flex-shrink: 0;
+    }
+
+    .add-user-row button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 8px;
+      background: #37474F;
+      color: white;
+      font-size: 0.85rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .add-user-row button:hover {
+      background: #263238;
+    }
+
     .toast {
       position: fixed;
       bottom: 24px;
@@ -1239,6 +1317,20 @@
       <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
       <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
 
+      <div id="usersAdminSection">
+        <div class="section-label">Users</div>
+        <div class="users-list" id="usersList"></div>
+        <div class="add-user-row">
+          <input type="email" id="newUserEmail" placeholder="Gmail address">
+          <select id="newUserRole">
+            <option value="viewer">Viewer</option>
+            <option value="scheduler">Scheduler</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button id="addUserBtn">+ Add</button>
+        </div>
+      </div>
+
       <div class="section-label">Account</div>
       <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
       <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
@@ -1336,6 +1428,8 @@
     // ─────────────────────────────────────────────
     //  State
     // ─────────────────────────────────────────────
+    let profileRows = [];
+
     const today = new Date();
 
     let viewYear = today.getFullYear();
@@ -1431,6 +1525,66 @@
         bariCall[`${y}-${m + 1}-${d}`] = staffRow.short_name;
       }
     }
+
+    async function fetchProfiles() {
+      const { data: rows, error } = await sb.from('profiles').select('*').order('email');
+      if (!error) profileRows = rows;
+    }
+
+    function renderUsersList() {
+      const list = document.getElementById('usersList');
+      list.innerHTML = profileRows.map(p => `
+        <div class="user-item" data-id="${p.id}">
+          <span class="user-email">${esc(p.email)}</span>
+          <select class="role-select" data-id="${p.id}">
+            <option value="viewer"${p.role === 'viewer' ? ' selected' : ''}>Viewer</option>
+            <option value="scheduler"${p.role === 'scheduler' ? ' selected' : ''}>Scheduler</option>
+            <option value="admin"${p.role === 'admin' ? ' selected' : ''}>Admin</option>
+          </select>
+          <button class="remove-btn" data-id="${p.id}" aria-label="Remove">&#x2715;</button>
+        </div>
+      `).join('');
+
+      list.querySelectorAll('.role-select').forEach(sel => {
+        sel.addEventListener('change', async () => {
+          const { error } = await sb.from('profiles').update({ role: sel.value }).eq('id', sel.dataset.id);
+          if (error) {
+            showToast('Role update failed — please try again.');
+            const row = profileRows.find(p => p.id === sel.dataset.id);
+            if (row) sel.value = row.role;
+          } else {
+            const row = profileRows.find(p => p.id === sel.dataset.id);
+            if (row) row.role = sel.value;
+          }
+        });
+      });
+
+      list.querySelectorAll('.user-item .remove-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          if (!confirm('Remove this user? They will lose access immediately.')) return;
+          const { error } = await sb.from('profiles').delete().eq('id', btn.dataset.id);
+          if (error) { showToast('Remove failed — please try again.'); return; }
+          profileRows = profileRows.filter(p => p.id !== btn.dataset.id);
+          renderUsersList();
+        });
+      });
+    }
+
+    document.getElementById('addUserBtn').addEventListener('click', async () => {
+      const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
+      const role = document.getElementById('newUserRole').value;
+      if (!email) return;
+      const { error } = await sb.rpc('create_profile', { user_email: email, user_role: role });
+      if (error) {
+        showToast(error.message.includes('No user found')
+          ? `No account found for ${email}. They must sign in once first.`
+          : 'Add user failed — please try again.');
+        return;
+      }
+      document.getElementById('newUserEmail').value = '';
+      await fetchProfiles();
+      renderUsersList();
+    });
 
     function setupRealtimeSubscriptions() {
       if (realtimeChannel) sb.removeChannel(realtimeChannel);
@@ -2241,9 +2395,11 @@
         currentUser ? `Signed in as ${currentUser.email}` : '';
       const admin = isAdmin();
       document.getElementById('staffAdminSection').style.display = admin ? '' : 'none';
+      document.getElementById('usersAdminSection').style.display = admin ? '' : 'none';
       document.querySelectorAll('#settingsOverlay .admin-only').forEach(el => {
         el.style.display = admin ? '' : 'none';
       });
+      if (admin) fetchProfiles().then(renderUsersList);
       document.getElementById('settingsOverlay').classList.add('open');
     }
 
