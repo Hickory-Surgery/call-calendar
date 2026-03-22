@@ -64,7 +64,7 @@ ASSIGNMENT_NORM = {
 def _channels(bg):
     if not bg:
         return 1.0, 1.0, 1.0
-    return bg.get("red", 1.0), bg.get("green", 1.0), bg.get("blue", 1.0)
+    return bg.get("red", 0.0), bg.get("green", 0.0), bg.get("blue", 0.0)
 
 
 def is_yellow(bg):
@@ -83,12 +83,13 @@ def is_colored(bg):
 
 
 def oncall_flags(bg):
-    """Return (oncall_am, oncall_pm). Green = no oncall (import data as-is)."""
+    """Return (oncall_am, oncall_pm) as app string values: 'none'/'single'/'double'.
+    Green = no oncall (import data as-is)."""
     if is_orange(bg):
-        return True, True
+        return 'double', 'double'
     if is_yellow(bg):
-        return True, False
-    return False, False
+        return 'single', 'single'
+    return 'none', 'none'
 
 
 # ── Sheets API ────────────────────────────────────────────────────────────────
@@ -134,39 +135,28 @@ def get_cell(row_data, col):
 
 # ── Week-block detection ──────────────────────────────────────────────────────
 
+
+# The sheet layout is fixed: first staff row at row 4 (0-based),
+# then a new block every 8 rows (1 header + 6 staff + 1 separator).
+FIRST_STAFF_ROW = 4
+BLOCK_SIZE = 8
+STAFF_PER_BLOCK = 6
+MAX_BLOCKS = 6  # no month spans more than 6 calendar weeks
+
+
 def find_week_blocks(rows):
     """
     Return list of [row_idx_0 .. row_idx_5] for each week block.
-
-    A staff row has at least one non-empty value in the assignment columns.
-    Blocks are groups of exactly 6 consecutive staff rows.
+    Uses the fixed layout (blocks at rows 4-9, 12-17, 20-25, …) rather than
+    trying to detect consecutive non-empty rows, which breaks when some staff
+    rows in a block are fully empty.
     """
-    # Mark which rows are staff rows
-    is_staff = []
-    for row in rows:
-        has_data = any(get_cell(row, c)[0] for c in ASSIGNMENT_COLS)
-        is_staff.append(has_data)
-
     blocks = []
-    i = 0
-    while i < len(is_staff):
-        if not is_staff[i]:
-            i += 1
-            continue
-        # Collect consecutive staff rows
-        run = []
-        while i < len(is_staff) and is_staff[i]:
-            run.append(i)
-            i += 1
-        # A valid week block is exactly 6 rows
-        if len(run) == 6:
-            blocks.append(run)
-        # If we get more than 6, split into 6-row chunks
-        elif len(run) > 6:
-            for start in range(0, len(run) - len(run) % 6, 6):
-                if start + 6 <= len(run):
-                    blocks.append(run[start:start + 6])
-
+    for b in range(MAX_BLOCKS):
+        start = FIRST_STAFF_ROW + b * BLOCK_SIZE
+        if start + STAFF_PER_BLOCK > len(rows):
+            break
+        blocks.append(list(range(start, start + STAFF_PER_BLOCK)))
     return blocks
 
 
@@ -211,7 +201,8 @@ def parse_sheet(sheet_name, sheet_obj, month):
                 bg = am_bg or pm_bg
                 oncall_am, oncall_pm = oncall_flags(bg)
 
-                if not (am or pm or oncall_am or oncall_pm):
+                has_data = am or pm or oncall_am != 'none' or oncall_pm != 'none'
+                if not has_data:
                     continue
 
                 # cellKey: `${y}-${m+1}-${d}-${person}` (no zero-padding, m is 1-based)
@@ -229,7 +220,7 @@ def parse_sheet(sheet_name, sheet_obj, month):
             sun_assign = normalize(sun_val)
             oncall_am, oncall_pm = oncall_flags(sat_bg or sun_bg)
 
-            if sat_assign or sun_assign or oncall_am or oncall_pm:
+            if sat_assign or sun_assign or oncall_am != 'none' or oncall_pm != 'none':
                 key = f"{sat_date.year}-{sat_date.month}-{sat_date.day}-{person}"
                 data[key] = {"am": sat_assign, "pm": sun_assign,
                              "oncall_am": oncall_am, "oncall_pm": oncall_pm}
@@ -239,17 +230,22 @@ def parse_sheet(sheet_name, sheet_obj, month):
 
 # ── Debug helper ──────────────────────────────────────────────────────────────
 
-def debug_sheet(sheet_obj):
+def debug_sheet(sheet_obj, month=1):
     grid_data = sheet_obj.get("data", [{}])[0]
     rows = grid_data.get("rowData", [])
     blocks = find_week_blocks(rows)
     print(f"  Total rows: {len(rows)}, week blocks found: {len(blocks)}")
-    for b_idx, row_indices in enumerate(blocks[:3]):   # show first 3 blocks
-        monday = monday_for_block(YEAR, 1, b_idx)      # Jan for debug
-        print(f"\n  Block {b_idx}  (Mon = {monday})")
-        for off, ri in enumerate(row_indices):
-            vals = [get_cell(rows[ri], c)[0] for c in range(18)]
-            print(f"    row {ri} [{STAFF_ORDER[off] if off < len(STAFF_ORDER) else '?'}]: {vals}")
+
+    # Show every row that has any content (value or color) within the grid
+    print("\n  All non-empty rows (cols 0-17):")
+    for i, row in enumerate(rows):
+        vals = [get_cell(row, c)[0] for c in range(18)]
+        colors = {c: get_cell(row, c)[1] for c in range(18) if get_cell(row, c)[1]}
+        if any(vals) or colors:
+            print(f"    row {i:3d}: {vals}  colors={list(colors.keys()) if colors else ''}")
+        if i > 120:
+            print("    (truncated at row 120)")
+            break
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -272,10 +268,14 @@ def main():
     print(f"Sheets found: {list(sheets_by_name.keys())}")
 
     if debug:
-        sheet = sheets_by_name.get("jan")
+        # Usage: --debug [month_name]  e.g. --debug may
+        debug_month = next((a for a in sys.argv[2:] if not a.startswith("--")), "jan")
+        sheet = sheets_by_name.get(debug_month)
         if sheet:
-            print("\n── DEBUG: Jan sheet ──")
+            print(f"\n── DEBUG: {debug_month} sheet ──")
             debug_sheet(sheet)
+        else:
+            print(f"Sheet '{debug_month}' not found. Available: {list(sheets_by_name.keys())}")
         sys.exit(0)
 
     all_data = {}
