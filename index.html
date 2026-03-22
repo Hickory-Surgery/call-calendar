@@ -932,6 +932,52 @@
       flex-shrink: 0;
     }
 
+    /* ── Settings tabs ── */
+    .sheet-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 16px;
+      border-bottom: 2px solid #ECEFF1;
+    }
+
+    .tab-btn {
+      padding: 8px 14px;
+      border: none;
+      background: none;
+      color: #90A4AE;
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.15s;
+    }
+
+    .tab-btn:hover {
+      color: #37474F;
+    }
+
+    .tab-btn.active {
+      color: #1565C0;
+      border-bottom-color: #1565C0;
+    }
+
+    .tab-panel {
+      display: none;
+    }
+
+    .tab-panel.active {
+      display: block;
+    }
+
+    .remove-btn:disabled {
+      background: #F5F5F5;
+      color: #CFD8DC;
+      cursor: not-allowed;
+    }
+
     .add-btn {
       width: 100%;
       padding: 10px;
@@ -1237,21 +1283,19 @@
     <div class="sheet">
       <div class="sheet-title">Settings</div>
 
-      <div id="staffAdminSection">
-        <div class="section-label">Staff</div>
+      <div class="sheet-tabs" id="settingsTabs">
+        <button class="tab-btn" data-tab="staff">Staff</button>
+        <button class="tab-btn" data-tab="users">Users</button>
+        <button class="tab-btn" data-tab="data">Data</button>
+        <button class="tab-btn" data-tab="account">Account</button>
+      </div>
+
+      <div class="tab-panel" id="tab-staff">
         <div class="staff-list" id="staffList"></div>
         <button class="add-btn" id="addStaffBtn">+ Add person</button>
       </div>
 
-      <div class="section-label">Data</div>
-      <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
-      <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
-      <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
-      <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
-      <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
-
-      <div id="usersAdminSection">
-        <div class="section-label">Users</div>
+      <div class="tab-panel" id="tab-users">
         <div class="users-list" id="usersList"></div>
         <div class="add-user-row">
           <input type="email" id="newUserEmail" placeholder="Gmail address">
@@ -1264,9 +1308,18 @@
         </div>
       </div>
 
-      <div class="section-label">Account</div>
-      <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
-      <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+      <div class="tab-panel" id="tab-data">
+        <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
+        <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
+        <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
+        <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
+        <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+      </div>
+
+      <div class="tab-panel" id="tab-account">
+        <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
+        <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+      </div>
 
       <div class="btn-row">
         <button class="btn btn-save" id="settingsDone">Done</button>
@@ -1471,8 +1524,11 @@
     }
 
     function renderUsersList() {
+      const adminCount = profileRows.filter(p => p.role === 'admin').length;
       const list = document.getElementById('usersList');
-      list.innerHTML = profileRows.map(p => `
+      list.innerHTML = profileRows.map(p => {
+        const isLastAdmin = p.role === 'admin' && adminCount === 1;
+        return `
         <div class="user-item" data-id="${p.id}">
           <span class="user-email">${esc(p.email)}</span>
           <select class="role-select" data-id="${p.id}">
@@ -1480,25 +1536,34 @@
             <option value="scheduler"${p.role === 'scheduler' ? ' selected' : ''}>Scheduler</option>
             <option value="admin"${p.role === 'admin' ? ' selected' : ''}>Admin</option>
           </select>
-          <button class="remove-btn" data-id="${p.id}" aria-label="Remove">&#x2715;</button>
-        </div>
-      `).join('');
+          <button class="remove-btn" data-id="${p.id}" aria-label="Remove"
+            ${isLastAdmin ? 'disabled title="Cannot remove the only admin"' : ''}>&#x2715;</button>
+        </div>`;
+      }).join('');
 
       list.querySelectorAll('.role-select').forEach(sel => {
         sel.addEventListener('change', async () => {
+          const row = profileRows.find(p => p.id === sel.dataset.id);
+          // Prevent demoting the only admin
+          if (row && row.role === 'admin' && sel.value !== 'admin') {
+            if (profileRows.filter(p => p.role === 'admin').length === 1) {
+              showToast('Cannot change role — this is the only admin.');
+              sel.value = 'admin';
+              return;
+            }
+          }
           const { error } = await sb.from('profiles').update({ role: sel.value }).eq('id', sel.dataset.id);
           if (error) {
             showToast('Role update failed — please try again.');
-            const row = profileRows.find(p => p.id === sel.dataset.id);
             if (row) sel.value = row.role;
           } else {
-            const row = profileRows.find(p => p.id === sel.dataset.id);
             if (row) row.role = sel.value;
+            renderUsersList(); // re-render to update last-admin state
           }
         });
       });
 
-      list.querySelectorAll('.user-item .remove-btn').forEach(btn => {
+      list.querySelectorAll('.user-item .remove-btn:not([disabled])').forEach(btn => {
         btn.addEventListener('click', async () => {
           if (!confirm('Remove this user? They will lose access immediately.')) return;
           const { error } = await sb.from('profiles').delete().eq('id', btn.dataset.id);
@@ -2347,19 +2412,50 @@
     // ─────────────────────────────────────────────
     //  Settings
     // ─────────────────────────────────────────────
+    function switchTab(tabName) {
+      document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+      });
+      document.querySelectorAll('.tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `tab-${tabName}`);
+      });
+    }
+
     function openSettings() {
-      renderStaffList();
-      document.getElementById('signedInAs').textContent =
-        currentUser ? `Signed in as ${currentUser.email}` : '';
       const admin = isAdmin();
-      document.getElementById('staffAdminSection').style.display = admin ? '' : 'none';
-      document.getElementById('usersAdminSection').style.display = admin ? '' : 'none';
+      const scheduler = currentRole === 'scheduler';
+
+      // Show/hide tabs by role
+      document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
+        const t = btn.dataset.tab;
+        const visible = (t === 'staff' || t === 'users') ? admin
+          : t === 'data' ? (admin || scheduler)
+          : true; // account
+        btn.style.display = visible ? '' : 'none';
+      });
+
+      // Show/hide admin-only data buttons
       document.querySelectorAll('#settingsOverlay .admin-only').forEach(el => {
         el.style.display = admin ? '' : 'none';
       });
-      if (admin) fetchProfiles().then(renderUsersList);
+
+      // Activate first visible tab
+      const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
+        .find(b => b.style.display !== 'none');
+      if (firstVisible) switchTab(firstVisible.dataset.tab);
+
+      if (admin) {
+        renderStaffList();
+        fetchProfiles().then(renderUsersList);
+      }
+      document.getElementById('signedInAs').textContent =
+        currentUser ? `Signed in as ${currentUser.email}` : '';
       document.getElementById('settingsOverlay').classList.add('open');
     }
+
+    document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
       await sb.auth.signOut();
