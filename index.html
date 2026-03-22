@@ -329,6 +329,17 @@
       background: transparent;
     }
 
+    /* Split-weekend out-of-month slot: muted text. :not() ensures oncall pills
+       (declared later, same specificity) still override on call days. */
+    .am-val.slot-out:not(.oncall-single):not(.oncall-double):not(.exception),
+    .pm-val.slot-out:not(.oncall-single):not(.oncall-double) {
+      color: #B0BEC5;
+    }
+
+    .date-out {
+      color: #B0BEC5;
+    }
+
     /* Hosp band: light gray spanning first→last hosp row within a day column.
        Specificity kept at 1 class so oncall colors on closed rows always win. */
     .hosp-band {
@@ -2088,7 +2099,11 @@
       if (!inMonth) cls += ' out-of-month';
       if (isToday) cls += ' today';
 
-      const dateStr = satIn && sunIn ? `${sd} / ${ud}` : satIn ? `${sd}` : `${ud}`;
+      // For split weekends show both dates; mute the out-of-month one
+      const dateStr = satIn && sunIn  ? `${sd} / ${ud}`
+        : satIn && !sunIn             ? `${sd} <span class="date-out">/ ${ud}</span>`
+        : !satIn && sunIn             ? `<span class="date-out">${sd} /</span> ${ud}`
+        :                               `${sd} / ${ud}`;
       const wk = weekKey(sat);
 
       const bariStaff = staff.filter(p => bariatric[p]);
@@ -2103,7 +2118,7 @@
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++)
-          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1]);
+          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1], satIn, sunIn);
       }
       return html + '</div>';
     }
@@ -2121,7 +2136,7 @@
       return first !== -1 ? [first, last] : null;
     }
 
-    function personRowHtml(y, m, d, person, inBand) {
+    function personRowHtml(y, m, d, person, inBand, amIn = true, pmIn = true) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
@@ -2132,8 +2147,8 @@
         </div>`;
       }
       const amTxt = abbr(am), pmTxt = abbr(pm);
-      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '');
-      const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '');
+      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '') + (amIn ? '' : ' slot-out');
+      const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
       const draggable = (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
