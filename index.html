@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
@@ -7,10 +8,21 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Call Calendar">
-  <link rel="manifest" href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;landscape&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
+  <link rel="manifest"
+    href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;orientation&quot;:&quot;landscape&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
   <title>Call Calendar</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://pkjlnjsswoadftkseffo.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBramxuanNzd29hZGZ0a3NlZmZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMjkyMzIsImV4cCI6MjA4OTcwNTIzMn0.OKaHUh1QCH3CNk15swiwhjn66HcEk7lpbmNZ3Xt1h6M';
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+  </script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
 
     :root {
       --topbar-h: 56px;
@@ -18,7 +30,7 @@
       --oncall-double: #FFB74D;
       --oncall-exception: #A5D6A7;
       --border: #D0D7DE;
-      --header-bg: #37474F;
+      --header-bg: #03080a;
       --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       --col: repeat(6, minmax(0, 1fr));
     }
@@ -55,10 +67,14 @@
       z-index: 20;
     }
 
-    .month-nav { display: flex; align-items: center; gap: 8px; }
+    .month-nav {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
     .month-nav button {
-      background: rgba(255,255,255,0.15);
+      background: rgba(255, 255, 255, 0.15);
       border: none;
       color: white;
       width: 32px;
@@ -72,7 +88,9 @@
       line-height: 1;
     }
 
-    .month-nav button:hover { background: rgba(255,255,255,0.28); }
+    .month-nav button:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
 
     .month-label {
       font-size: 1rem;
@@ -81,10 +99,13 @@
       text-align: center;
     }
 
-    .topbar-actions { display: flex; gap: 6px; }
+    .topbar-actions {
+      display: flex;
+      gap: 6px;
+    }
 
     .icon-btn {
-      background: rgba(255,255,255,0.15);
+      background: rgba(255, 255, 255, 0.15);
       border: none;
       color: white;
       width: 36px;
@@ -97,11 +118,12 @@
       justify-content: center;
     }
 
-    .icon-btn:hover { background: rgba(255,255,255,0.28); }
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.28);
+    }
 
     /* ── Calendar container ── */
-    .cal-container {
-    }
+    .cal-container {}
 
     /* ── Day-of-week header ── */
     .day-headers {
@@ -114,17 +136,22 @@
       flex-shrink: 0;
     }
 
-    .day-headers > div {
+    .day-headers>div {
       padding: 5px 4px;
       text-align: center;
       font-size: 0.72rem;
       font-weight: 600;
-      color: rgba(255,255,255,0.9);
-      border-right: 1px solid rgba(255,255,255,0.1);
+      color: rgba(255, 255, 255, 0.9);
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    .day-headers > div:last-child { border-right: none; }
-    .day-headers .weekend { color: rgba(255,255,255,0.6); }
+    .day-headers>div:last-child {
+      border-right: none;
+    }
+
+    .day-headers .weekend {
+      color: rgba(255, 255, 255, 0.6);
+    }
 
     /* ── Calendar grid ── */
     .cal-grid {
@@ -141,8 +168,13 @@
       min-height: 0;
     }
 
-    .day-cell.weekend { background: #F8F9FA; }
-    .day-cell.out-of-month { background: #ECEEF1; }
+    .day-cell.weekend {
+      background: #F8F9FA;
+    }
+
+    .day-cell.out-of-month {
+      background: #ECEEF1;
+    }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -159,53 +191,115 @@
       gap: 4px;
     }
 
-    .wk-selects { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+    .wk-selects {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex-shrink: 0;
+    }
 
     .backup-select {
       font-size: 0.6rem;
       font-weight: 600;
       color: #37474F;
-      background: rgba(255,255,255,0.55);
-      border: 1px solid rgba(0,0,0,0.15);
+      background: rgba(255, 255, 255, 0.55);
+      border: 1px solid rgba(0, 0, 0, 0.15);
       border-radius: 3px;
       padding: 1px 2px;
       cursor: pointer;
       max-width: 52px;
       width: 52px;
     }
-    .backup-select:focus { outline: none; border-color: #1565C0; }
-    .bari-call-select { background: #CFD8DC; border-color: rgba(0,0,0,0.12); color: #37474F; }
 
-    /* ── Topbar day-summary table ── */
-    .day-summary {
-      display: grid;
-      grid-template-columns: auto auto;
-      gap: 1px 8px;
-      align-items: center;
+    .backup-select:focus {
+      outline: none;
+      border-color: #1565C0;
     }
-    .day-summary .ds-label {
-      font-size: 0.6rem;
+
+    .bari-call-select {
+      background: #CFD8DC;
+      border-color: rgba(0, 0, 0, 0.12);
+      color: #37474F;
+    }
+
+    /* ── Topbar day-summary ── */
+    .day-summary {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+    }
+
+    .ds-call-group {
+      display: flex;
+      align-items: baseline;
+      gap: 5px;
+    }
+
+    .ds-call-group .ds-label {
+      font-size: 0.68rem;
       font-weight: 700;
-      color: rgba(255,255,255,0.6);
+      color: rgba(255, 255, 255, 0.75);
       text-transform: uppercase;
       letter-spacing: 0.4px;
-      text-align: right;
     }
-    .day-summary .ds-value {
+
+    .ds-call-group .ds-value {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: white;
+      white-space: nowrap;
+    }
+
+    .ds-stack {
+      display: grid;
+      grid-template-columns: auto auto;
+      column-gap: 4px;
+      row-gap: 1px;
+      align-items: baseline;
+    }
+
+    .ds-row {
+      display: contents;
+    }
+
+    .ds-row .ds-label {
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .ds-row .ds-value {
       font-size: 0.68rem;
       font-weight: 600;
       color: white;
       white-space: nowrap;
     }
-    .day-summary .ds-value.empty { color: rgba(255,255,255,0.3); }
-    .day-summary .ds-label.primary { font-size: 0.68rem; color: rgba(255,255,255,0.85); }
-    .day-summary .ds-value.primary { font-size: 0.85rem; font-weight: 700; }
 
-    .cell-date { background: #CFD8DC; color: #37474F; }
+    .day-summary .ds-value.empty {
+      color: rgba(255, 255, 255, 0.3);
+    }
 
-    .today .cell-date { background: #1565C0; color: white; }
+    .cell-date {
+      background: #CFD8DC;
+      color: #37474F;
+    }
 
-    .out-of-month .cell-date { color: #AABBCC; }
+    .today .cell-date {
+      background: #1565C0;
+      color: white;
+    }
+
+    .today .cell-date .backup-select {
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.3);
+      color: white;
+    }
+
+    .out-of-month .cell-date {
+      color: #AABBCC;
+    }
 
 
     /* ── Person row ── */
@@ -222,17 +316,67 @@
       overflow: hidden;
     }
 
-    .person-row:hover  { filter: brightness(0.89); }
-    .person-row:active { filter: brightness(0.8); }
+    .person-row:hover {
+      filter: brightness(0.89);
+    }
 
-    .person-row { background: transparent; }
-    .editing-highlight { outline: 2px solid #1565C0; outline-offset: 1px; border-radius: 3px; }
+    .person-row:active {
+      filter: brightness(0.8);
+    }
 
-    .am-val.oncall-single, .pm-val.oncall-single { background: var(--oncall-single); border: 1px solid #F9A825; padding: 1px 3px; }
-    .am-val.oncall-double, .pm-val.oncall-double { background: var(--oncall-double); border: 1px solid #E65100; padding: 1px 3px; }
-    .am-val.exception { background: var(--oncall-exception); border: 1px solid #388E3C; padding: 1px 3px; }
-    .am-val.oncall-single, .am-val.oncall-double, .am-val.exception { border-radius: 2px 0 0 2px; border-right: none; }
-    .pm-val.oncall-single, .pm-val.oncall-double { border-radius: 0 2px 2px 0; border-left: none; }
+    .person-row {
+      background: transparent;
+    }
+
+    .editing-highlight {
+      outline: 2px solid #1565C0;
+      outline-offset: 1px;
+      border-radius: 3px;
+    }
+
+    .drag-source {
+      opacity: 0.4;
+    }
+
+    .drag-over {
+      outline: 2px solid #FFA000;
+      outline-offset: 1px;
+      border-radius: 3px;
+      background: rgba(255, 160, 0, 0.08);
+    }
+
+    .am-val.oncall-single,
+    .pm-val.oncall-single {
+      background: var(--oncall-single);
+      border: 1px solid #F9A825;
+      padding: 1px 3px;
+    }
+
+    .am-val.oncall-double,
+    .pm-val.oncall-double {
+      background: var(--oncall-double);
+      border: 1px solid #E65100;
+      padding: 1px 3px;
+    }
+
+    .am-val.exception {
+      background: var(--oncall-exception);
+      border: 1px solid #388E3C;
+      padding: 1px 3px;
+    }
+
+    .am-val.oncall-single,
+    .am-val.oncall-double,
+    .am-val.exception {
+      border-radius: 2px 0 0 2px;
+      border-right: none;
+    }
+
+    .pm-val.oncall-single,
+    .pm-val.oncall-double {
+      border-radius: 0 2px 2px 0;
+      border-left: none;
+    }
 
     /* Person name */
     .pname {
@@ -257,7 +401,8 @@
       overflow: hidden;
     }
 
-    .am-val, .pm-val {
+    .am-val,
+    .pm-val {
       font-size: 0.68rem;
       white-space: nowrap;
       overflow: hidden;
@@ -267,10 +412,23 @@
       text-align: center;
     }
 
-    .am-val { color: #1A237E; }
-    .pm-val { color: #4A148C; }
-    .am-val.empty, .pm-val.empty { color: #B0BEC5; }
-    .am-val.hosp, .pm-val.hosp { font-weight: 700; }
+    .am-val {
+      color: #1A237E;
+    }
+
+    .pm-val {
+      color: #4A148C;
+    }
+
+    .am-val.empty,
+    .pm-val.empty {
+      color: #B0BEC5;
+    }
+
+    .am-val.hosp,
+    .pm-val.hosp {
+      font-weight: 700;
+    }
 
     .slot-sep {
       display: none;
@@ -292,10 +450,22 @@
       transition: filter 0.08s;
     }
 
-    .closed-row:hover { filter: brightness(0.9); }
-    .closed-row.oncall-single { background: var(--oncall-single); }
-    .closed-row.oncall-double { background: var(--oncall-double); }
-    .closed-row.oncall-exception, .closed-row.exception { background: var(--oncall-exception); }
+    .closed-row:hover {
+      filter: brightness(0.9);
+    }
+
+    .closed-row.oncall-single {
+      background: var(--oncall-single);
+    }
+
+    .closed-row.oncall-double {
+      background: var(--oncall-double);
+    }
+
+    .closed-row.oncall-exception,
+    .closed-row.exception {
+      background: var(--oncall-exception);
+    }
 
     .pname-closed {
       font-size: 0.58rem;
@@ -337,21 +507,81 @@
       width: 13px;
       height: 13px;
       border-radius: 3px;
-      border: 1px solid rgba(0,0,0,0.12);
+      border: 1px solid rgba(0, 0, 0, 0.12);
     }
 
     /* ── Bottom-sheet base ── */
+    /* ── Login screen ── */
+    #loginScreen {
+      display: flex;
+      position: fixed;
+      inset: 0;
+      background: #37474F;
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 24px;
+    }
+    #loginScreen.hidden { display: none; }
+    .login-card {
+      background: white;
+      border-radius: 12px;
+      padding: 40px 48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .login-title {
+      font-size: 1.3rem;
+      font-weight: 700;
+      color: #37474F;
+    }
+    .login-sub {
+      font-size: 0.85rem;
+      color: #607D8B;
+      text-align: center;
+    }
+    .btn-google {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: white;
+      border: 1px solid #D0D7DE;
+      border-radius: 6px;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: #37474F;
+      cursor: pointer;
+    }
+    .btn-google:hover { background: #F5F5F5; }
+    #loginScreen.checking .login-card { display: none; }
+    #loginScreen.checking::after {
+      content: '';
+      width: 36px; height: 36px;
+      border: 3px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
     .sheet-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.45);
+      background: rgba(0, 0, 0, 0.45);
       z-index: 100;
       align-items: flex-end;
       justify-content: center;
     }
 
-    .sheet-overlay.open { display: flex; }
+    .sheet-overlay.open {
+      display: flex;
+    }
 
     .sheet {
       background: white;
@@ -368,16 +598,20 @@
       height: 20px;
       margin: 0 auto 12px;
       cursor: grab;
-      background-image: repeating-linear-gradient(
-        to bottom,
-        transparent 0px, transparent 3px,
-        #C0C8D0 3px, #C0C8D0 5px
-      );
+      background-image: repeating-linear-gradient(to bottom,
+          transparent 0px, transparent 3px,
+          #C0C8D0 3px, #C0C8D0 5px);
       border-radius: 2px;
       opacity: 0.8;
     }
-    .sheet-handle:hover { opacity: 1; }
-    .sheet-handle:active { cursor: grabbing; }
+
+    .sheet-handle:hover {
+      opacity: 1;
+    }
+
+    .sheet-handle:active {
+      cursor: grabbing;
+    }
 
     .sheet-title-row {
       display: flex;
@@ -403,7 +637,10 @@
       cursor: pointer;
       flex-shrink: 0;
     }
-    .btn-clear-inline:hover { background: #FFCDD2; }
+
+    .btn-clear-inline:hover {
+      background: #FFCDD2;
+    }
 
     /* ── Edit panel two-column layout ── */
     .edit-layout {
@@ -412,7 +649,10 @@
       align-items: stretch;
     }
 
-    .assign-col { flex: 1; min-width: 0; }
+    .assign-col {
+      flex: 1;
+      min-width: 0;
+    }
 
     .right-col {
       display: flex;
@@ -421,7 +661,9 @@
     }
 
     /* tighter grid for the oncall section */
-    .cg-oncall { grid-template-columns: max-content 36px 36px; }
+    .cg-oncall {
+      grid-template-columns: max-content 36px 36px;
+    }
 
     .action-grid {
       display: flex;
@@ -481,9 +723,18 @@
       transition: background 0.1s, border-color 0.1s;
     }
 
-    .cg-btn:hover { filter: brightness(0.94); }
-    .cg-label.cg-disabled { color: #B0BEC5; }
-    .cg-btn.cg-disabled { opacity: 0.25; pointer-events: none; }
+    .cg-btn:hover {
+      filter: brightness(0.94);
+    }
+
+    .cg-label.cg-disabled {
+      color: #B0BEC5;
+    }
+
+    .cg-btn.cg-disabled {
+      opacity: 0.25;
+      pointer-events: none;
+    }
 
     .cg-btn.active {
       background: #455A64;
@@ -502,23 +753,37 @@
       border-color: #F9A825;
     }
 
-    .cg-btn.active.single::after { color: #4A3000; }
+    .cg-btn.active.single::after {
+      color: #4A3000;
+    }
 
     .cg-btn.active.double {
       background: var(--oncall-double);
       border-color: #E65100;
     }
-    .cg-btn.active.double::after { color: #3E0000; }
+
+    .cg-btn.active.double::after {
+      color: #3E0000;
+    }
 
     .cg-btn.active.exception {
       background: var(--oncall-exception);
       border-color: #388E3C;
     }
-    .cg-btn.active.exception::after { color: #1B5E20; }
 
-    .cg-btn.active.double::after { color: #3E0000; }
+    .cg-btn.active.exception::after {
+      color: #1B5E20;
+    }
 
-    .btn-row { display: flex; gap: 10px; margin-top: 20px; }
+    .cg-btn.active.double::after {
+      color: #3E0000;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
 
     .btn {
       flex: 1;
@@ -530,14 +795,43 @@
       cursor: pointer;
     }
 
-    .btn-save   { background: #37474F; color: white; }
-    .btn-save:hover   { background: #263238; }
-    .btn-cancel { background: #ECEFF1; color: #37474F; }
-    .btn-cancel:hover { background: #CFD8DC; }
-    .btn-clear   { background: #FFEBEE; color: #B71C1C; flex: 0 0 auto; padding: 12px 16px; }
-    .btn-clear:hover   { background: #FFCDD2; }
-    .btn-advance { background: #1565C0; color: white; }
-    .btn-advance:hover { background: #0D47A1; }
+    .btn-save {
+      background: #37474F;
+      color: white;
+    }
+
+    .btn-save:hover {
+      background: #263238;
+    }
+
+    .btn-cancel {
+      background: #ECEFF1;
+      color: #37474F;
+    }
+
+    .btn-cancel:hover {
+      background: #CFD8DC;
+    }
+
+    .btn-clear {
+      background: #FFEBEE;
+      color: #B71C1C;
+      flex: 0 0 auto;
+      padding: 12px 16px;
+    }
+
+    .btn-clear:hover {
+      background: #FFCDD2;
+    }
+
+    .btn-advance {
+      background: #1565C0;
+      color: white;
+    }
+
+    .btn-advance:hover {
+      background: #0D47A1;
+    }
 
     /* ── Settings ── */
     .section-label {
@@ -549,9 +843,25 @@
       margin-bottom: 8px;
     }
 
-    .staff-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
-    .staff-item { display: flex; align-items: center; gap: 8px; cursor: default; }
-    .staff-item.drag-over { outline: 2px solid #1565C0; border-radius: 6px; }
+    .staff-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .staff-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: default;
+    }
+
+    .staff-item.drag-over {
+      outline: 2px solid #1565C0;
+      border-radius: 6px;
+    }
+
     .drag-handle {
       cursor: grab;
       color: #90A4AE;
@@ -560,7 +870,10 @@
       user-select: none;
       flex-shrink: 0;
     }
-    .drag-handle:active { cursor: grabbing; }
+
+    .drag-handle:active {
+      cursor: grabbing;
+    }
 
     .staff-item input[type="text"] {
       padding: 8px 8px;
@@ -570,10 +883,19 @@
       color: #263238;
       min-width: 0;
     }
-    .staff-short { flex: 0 0 52px; }
-    .staff-full  { flex: 1; }
 
-    .staff-item input:focus { outline: none; border-color: #37474F; }
+    .staff-short {
+      flex: 0 0 52px;
+    }
+
+    .staff-full {
+      flex: 1;
+    }
+
+    .staff-item input:focus {
+      outline: none;
+      border-color: #37474F;
+    }
 
     .bariatric-label {
       display: flex;
@@ -585,6 +907,7 @@
       flex-shrink: 0;
       cursor: pointer;
     }
+
     .bariatric-label input[type="checkbox"] {
       width: 14px;
       height: 14px;
@@ -620,7 +943,9 @@
       margin-bottom: 20px;
     }
 
-    .add-btn:hover { background: #F5F5F5; }
+    .add-btn:hover {
+      background: #F5F5F5;
+    }
 
     .data-btn {
       display: block;
@@ -637,11 +962,21 @@
       margin-bottom: 8px;
     }
 
-    .data-btn:hover { background: #ECEFF1; }
-    .data-btn.danger { color: #B71C1C; border-color: #FFCDD2; }
-    .data-btn.danger:hover { background: #FFEBEE; }
+    .data-btn:hover {
+      background: #ECEFF1;
+    }
 
-    .month-section { }
+    .data-btn.danger {
+      color: #B71C1C;
+      border-color: #FFCDD2;
+    }
+
+    .data-btn.danger:hover {
+      background: #FFEBEE;
+    }
+
+    .month-section {}
+
     .month-heading {
       background: #546E7A;
       color: white;
@@ -650,7 +985,10 @@
       font-weight: 700;
       letter-spacing: 0.5px;
     }
-    .scroll-sentinel { height: 1px; }
+
+    .scroll-sentinel {
+      height: 1px;
+    }
 
     /* ── Totals table ── */
     .totals-table {
@@ -659,6 +997,7 @@
       margin-top: 8px;
       font-size: 0.88rem;
     }
+
     .totals-table th {
       text-align: center;
       padding: 6px 10px;
@@ -669,23 +1008,41 @@
       letter-spacing: 0.5px;
       border-bottom: 2px solid #D0D7DE;
     }
-    .totals-table th:first-child { text-align: left; }
+
+    .totals-table th:first-child {
+      text-align: left;
+    }
+
     .totals-table td {
       padding: 7px 10px;
       border-bottom: 1px solid #ECEFF1;
       text-align: center;
       color: #37474F;
     }
-    .totals-table td:first-child { text-align: left; font-weight: 600; }
-    .totals-table tr:last-child td { border-bottom: none; }
+
+    .totals-table td:first-child {
+      text-align: left;
+      font-weight: 600;
+    }
+
+    .totals-table tr:last-child td {
+      border-bottom: none;
+    }
+
     .totals-table .total-row td {
       font-weight: 700;
       border-top: 2px solid #D0D7DE;
       border-bottom: none;
       color: #263238;
     }
-    .totals-frye  { background: #FFFDE7; }
-    .totals-cmvc  { background: #FFF3E0; }
+
+    .totals-frye {
+      background: #FFFDE7;
+    }
+
+    .totals-cmvc {
+      background: #FFF3E0;
+    }
 
     /* ── Portrait nudge (phones only) ── */
     .rotate-nudge {
@@ -707,41 +1064,70 @@
         padding: 32px;
         text-align: center;
       }
+
       .rotate-nudge-icon {
         font-size: 3rem;
         animation: rotate-hint 2s ease-in-out infinite;
       }
+
       .rotate-nudge-title {
         font-size: 1.1rem;
         font-weight: 700;
       }
+
       .rotate-nudge-sub {
         font-size: 0.85rem;
-        color: rgba(255,255,255,0.7);
+        color: rgba(255, 255, 255, 0.7);
         line-height: 1.5;
       }
+
       .rotate-nudge-dismiss {
         margin-top: 8px;
         padding: 10px 24px;
-        border: 1.5px solid rgba(255,255,255,0.4);
+        border: 1.5px solid rgba(255, 255, 255, 0.4);
         border-radius: 8px;
         background: transparent;
         color: white;
         font-size: 0.85rem;
         cursor: pointer;
       }
+
       @keyframes rotate-hint {
-        0%   { transform: rotate(0deg); }
-        30%  { transform: rotate(90deg); }
-        70%  { transform: rotate(90deg); }
-        100% { transform: rotate(0deg); }
+        0% {
+          transform: rotate(0deg);
+        }
+
+        30% {
+          transform: rotate(90deg);
+        }
+
+        70% {
+          transform: rotate(90deg);
+        }
+
+        100% {
+          transform: rotate(0deg);
+        }
       }
     }
   </style>
 </head>
+
 <body>
 
   <!-- Portrait nudge (phones only) -->
+  <!-- Login screen -->
+  <div id="loginScreen" class="checking">
+    <div class="login-card">
+      <div class="login-title">Call Calendar</div>
+      <div class="login-sub">Sign in to view the schedule</div>
+      <button class="btn-google" id="btnGoogleSignIn">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Sign in with Google
+      </button>
+    </div>
+  </div>
+
   <div class="rotate-nudge" id="rotateNudge">
     <div class="rotate-nudge-icon">&#x21BA;</div>
     <div class="rotate-nudge-title">Rotate your device</div>
@@ -751,55 +1137,66 @@
 
   <div class="app">
 
-  <!-- Top bar -->
-  <div class="topbar">
-    <div class="month-nav">
-      <button id="prevMonth" aria-label="Previous month">&#8249;</button>
-      <span class="month-label" id="monthLabel"></span>
-      <button id="nextMonth" aria-label="Next month">&#8250;</button>
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="month-nav">
+        <button id="prevMonth" aria-label="Previous month">&#8249;</button>
+        <span class="month-label" id="monthLabel"></span>
+        <button id="nextMonth" aria-label="Next month">&#8250;</button>
+      </div>
+      <div class="day-summary" id="daySummary">
+        <div class="ds-call-group">
+          <span class="ds-label">Call</span>
+          <span class="ds-value empty" id="ds-call">—</span>
+        </div>
+        <div class="ds-stack">
+          <div class="ds-row">
+            <span class="ds-label">Backup</span>
+            <span class="ds-value empty" id="ds-backup">—</span>
+          </div>
+          <div class="ds-row">
+            <span class="ds-label">Bari</span>
+            <span class="ds-value empty" id="ds-bari">—</span>
+          </div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="todayBtn" title="Go to today">&#9711;</button>
+        <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
+      </div>
     </div>
-    <div class="day-summary" id="daySummary">
-      <span class="ds-label primary">Call</span><span class="ds-value empty primary" id="ds-call">—</span>
-      <span class="ds-label">Backup</span>   <span class="ds-value empty" id="ds-backup">—</span>
-      <span class="ds-label">Bariatric</span><span class="ds-value empty" id="ds-bari">—</span>
-    </div>
-    <div class="topbar-actions">
-      <button class="icon-btn" id="todayBtn" title="Go to today">&#9711;</button>
-      <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
-    </div>
-  </div>
 
-  <!-- Calendar -->
-  <div class="day-headers">
-    <div>Mon</div>
-    <div>Tue</div>
-    <div>Wed</div>
-    <div>Thu</div>
-    <div>Fri</div>
-    <div class="weekend">Sat / Sun</div>
-  </div>
-  <div class="cal-container">
-  </div>
+    <!-- Calendar -->
+    <div class="day-headers">
+      <div>Mon</div>
+      <div>Tue</div>
+      <div>Wed</div>
+      <div>Thu</div>
+      <div>Fri</div>
+      <div class="weekend">Sat / Sun</div>
+    </div>
+    <div class="cal-container">
+    </div>
 
-  <!-- Legend -->
-  <div class="legend">
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--oncall-single)"></div>
-      Single call
+    <!-- Legend -->
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:var(--oncall-single)"></div>
+        Single call
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:var(--oncall-double)"></div>
+        Double call
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:var(--oncall-exception)"></div>
+        Exception
+      </div>
+      <div class="legend-item">
+        <div class="legend-swatch" style="background:#CFD8DC"></div>
+        Closed
+      </div>
     </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--oncall-double)"></div>
-      Double call
-    </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:var(--oncall-exception)"></div>
-      Exception
-    </div>
-    <div class="legend-item">
-      <div class="legend-swatch" style="background:#CFD8DC"></div>
-      Closed
-    </div>
-  </div>
 
   </div><!-- /.app -->
 
@@ -832,6 +1229,10 @@
       <button class="data-btn danger" id="clearMonthBtn">&#x2715; Clear this month's data</button>
       <button class="data-btn danger" id="clearAllBtn">&#x2715; Clear all data</button>
 
+      <div class="section-label">Account</div>
+      <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
+      <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+
       <div class="btn-row">
         <button class="btn btn-save" id="settingsDone">Done</button>
       </div>
@@ -843,7 +1244,8 @@
     <div class="sheet">
       <div class="sheet-title-row">
         <div class="sheet-title" id="totalsTitle"></div>
-        <button class="btn-clear-inline" id="totalsDismiss" style="background:#ECEFF1;border-color:#CFD8DC;color:#37474F;">Close</button>
+        <button class="btn-clear-inline" id="totalsDismiss"
+          style="background:#ECEFF1;border-color:#CFD8DC;color:#37474F;">Close</button>
       </div>
       <div id="totalsTable"></div>
     </div>
@@ -853,31 +1255,85 @@
 
   <script>
     // ─────────────────────────────────────────────
+    //  Auth
+    // ─────────────────────────────────────────────
+    let currentUser = null;
+    let currentRole = 'viewer';
+
+    const loginScreen = document.getElementById('loginScreen');
+
+    document.getElementById('btnGoogleSignIn').addEventListener('click', () => {
+      sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href }
+      });
+    });
+
+    async function fetchRole(userId) {
+      const { data } = await sb.from('profiles').select('role').eq('id', userId).single();
+      return data ? data.role : null;
+    }
+
+    async function applySession(session) {
+      const role = await fetchRole(session.user.id);
+      if (!role) {
+        await sb.auth.signOut();
+        loginScreen.classList.remove('checking');
+        loginScreen.querySelector('.login-sub').textContent = 'Access not authorised. Contact an admin.';
+        return;
+      }
+      currentUser = session.user;
+      currentRole = role;
+      loginScreen.classList.add('hidden');
+    }
+
+    // Initial load: check for a stored session
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        applySession(session);
+      } else {
+        loginScreen.classList.remove('checking');
+      }
+    });
+
+    // Handle sign-in and sign-out during the session
+    sb.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        applySession(session);
+      } else if (currentUser) {
+        // Only revert to login if we were previously signed in (genuine sign-out)
+        currentUser = null;
+        currentRole = 'viewer';
+        loginScreen.classList.remove('hidden');
+      }
+    });
+
+    // ─────────────────────────────────────────────
     //  Constants
     // ─────────────────────────────────────────────
     const ASSIGNMENTS = ['', 'ov', 'hosp', 'C-surg', 'F-surg', 'ba-C', 'ba-F', 'admin', 'unavailable', 'CLOSED'];
-    const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-    const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-    const DATA_KEY      = 'callcal_data';
-    const STAFF_KEY     = 'callcal_staff';
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const DATA_KEY = 'callcal_data';
+    const STAFF_KEY = 'callcal_staff';
     const BARIATRIC_KEY = 'callcal_bariatric';
     const BARI_CALL_KEY = 'callcal_bari_call';
-    const FULLNAME_KEY  = 'callcal_fullnames';
+    const FULLNAME_KEY = 'callcal_fullnames';
 
     // ─────────────────────────────────────────────
     //  State
     // ─────────────────────────────────────────────
     const today = new Date();
 
-    let viewYear  = today.getFullYear();
+    let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
 
-    let staff     = loadStaff();
-    let data      = loadData();
-    let bariatric  = loadBariatric();
-    let bariCall   = loadBariCall();
-    let fullnames  = loadFullnames();
-    let editing   = null;
+    let staff = loadStaff();
+    let data = loadData();
+    let bariatric = loadBariatric();
+    let bariCall = loadBariCall();
+    let fullnames = loadFullnames();
+    let editing = null;
 
     // ─────────────────────────────────────────────
     //  Persistence
@@ -939,7 +1395,7 @@
       // Monday of the week containing sat (sat.getDay() === 6, so mon = sat - 5)
       const mon = new Date(sat);
       mon.setDate(sat.getDate() - 5);
-      return `${mon.getFullYear()}-${mon.getMonth()+1}-${mon.getDate()}`;
+      return `${mon.getFullYear()}-${mon.getMonth() + 1}-${mon.getDate()}`;
     }
 
     function todayWeekKey() {
@@ -947,7 +1403,7 @@
       const d = new Date(today);
       const offset = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
       d.setDate(d.getDate() - offset);
-      return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`;
+      return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
     }
 
     function todayDataDate() {
@@ -966,8 +1422,8 @@
       const c = data[cellKey(y, m, d, person)] || {};
       const legacy = c.oncall || 'none'; // backwards compat
       return {
-        am:        c.am        || '',
-        pm:        c.pm        || '',
+        am: c.am || '',
+        pm: c.pm || '',
         oncall_am: c.oncall_am || legacy,
         oncall_pm: c.oncall_pm || legacy,
         exception: c.exception || false,
@@ -989,8 +1445,8 @@
     // ─────────────────────────────────────────────
     function esc(s) {
       return String(s)
-        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     // Abbreviate long values to fit narrow cells
@@ -1009,8 +1465,8 @@
     //  Multi-month scroll rendering
     // ─────────────────────────────────────────────
 
-    function prevMo(y, m) { return m === 0  ? { y: y-1, m: 11 } : { y, m: m-1 }; }
-    function nextMo(y, m) { return m === 11 ? { y: y+1, m: 0  } : { y, m: m+1 }; }
+    function prevMo(y, m) { return m === 0 ? { y: y - 1, m: 11 } : { y, m: m - 1 }; }
+    function nextMo(y, m) { return m === 11 ? { y: y + 1, m: 0 } : { y, m: m + 1 }; }
 
     function buildMonthHTML(ry, rm) {
       const firstDow = new Date(ry, rm, 1).getDay();
@@ -1062,6 +1518,7 @@
         saveBariCall();
         updateDaySummary();
       });
+      setupGridDrag(grid);
       sec.appendChild(grid);
 
       if (headingObserver) headingObserver.observe(hdg);
@@ -1081,7 +1538,7 @@
     }
 
     function getContainer() { return document.querySelector('.cal-container'); }
-    function getApp()       { return document.querySelector('.app'); }
+    function getApp() { return document.querySelector('.app'); }
 
     function appendNextMonth() {
       const sections = getContainer().querySelectorAll('.month-section');
@@ -1095,21 +1552,101 @@
       const { y, m } = prevMo(+first.dataset.y, +first.dataset.m);
       const app = getApp();
       const prevST = app.scrollTop;
-      const prevH  = getContainer().scrollHeight;
+      const prevH = getContainer().scrollHeight;
       getContainer().insertBefore(createMonthSection(y, m), first);
       app.scrollTop = prevST + (getContainer().scrollHeight - prevH);
     }
 
+    // ─────────────────────────────────────────────
+    //  Drag-to-reassign call
+    // ─────────────────────────────────────────────
+    let dragSrc = null;
+
+    function setupGridDrag(grid) {
+      let dragInitiatedFrom = null;
+
+      // mousedown always fires before dragstart, so we can record
+      // which child element the drag originated from
+      grid.addEventListener('mousedown', e => { dragInitiatedFrom = e.target; });
+
+      grid.addEventListener('dragstart', e => {
+        const row = e.target.closest('[data-person]');
+        if (!row) return;
+        const y = +row.dataset.y, m = +row.dataset.m, d = +row.dataset.d, person = row.dataset.person;
+        const cell = getCell(y, m, d, person);
+        if (cell.oncall_am === 'none' && cell.oncall_pm === 'none') { e.preventDefault(); return; }
+
+        // Dragging from the PM/Sun slot moves only that half; anything else moves the whole pill
+        const pmDrag = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.pm-val'));
+        if (pmDrag && cell.oncall_pm === 'none') { e.preventDefault(); return; }
+
+        dragSrc = { y, m, d, person, half: pmDrag ? 'pm' : 'both' };
+        e.dataTransfer.effectAllowed = 'move';
+        row.classList.add('drag-source');
+      });
+
+      grid.addEventListener('dragover', e => {
+        if (!dragSrc) return;
+        const row = e.target.closest('[data-person]');
+        if (!row) return;
+        if (+row.dataset.y === dragSrc.y && +row.dataset.m === dragSrc.m &&
+          +row.dataset.d === dragSrc.d && row.dataset.person !== dragSrc.person) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          row.classList.add('drag-over');
+        }
+      });
+
+      grid.addEventListener('dragleave', e => {
+        const row = e.target.closest('[data-person]');
+        if (row && !row.contains(e.relatedTarget)) row.classList.remove('drag-over');
+      });
+
+      grid.addEventListener('drop', e => {
+        if (!dragSrc) return;
+        const row = e.target.closest('[data-person]');
+        if (!row) return;
+        const ty = +row.dataset.y, tm = +row.dataset.m, td = +row.dataset.d, tPerson = row.dataset.person;
+        if (ty !== dragSrc.y || tm !== dragSrc.m || td !== dragSrc.d || tPerson === dragSrc.person) return;
+        e.preventDefault();
+        const src = getCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person);
+        const tgt = getCell(ty, tm, td, tPerson);
+        if (dragSrc.half === 'pm') {
+          setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, oncall_pm: 'none' });
+          setCell(ty, tm, td, tPerson, { ...tgt, oncall_pm: src.oncall_pm });
+        } else {
+          setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, oncall_am: 'none', oncall_pm: 'none' });
+          // Only overwrite target slots that the source actually carries; preserve any
+          // values already on the target (e.g. a PM half dragged there in a prior move)
+          setCell(ty, tm, td, tPerson, {
+            ...tgt,
+            ...(src.oncall_am !== 'none' && { oncall_am: src.oncall_am }),
+            ...(src.oncall_pm !== 'none' && { oncall_pm: src.oncall_pm }),
+          });
+        }
+        reRenderMonth(ty, tm);
+        updateDaySummary();
+        dragSrc = null;
+      });
+
+      grid.addEventListener('dragend', () => {
+        dragSrc = null;
+        document.querySelectorAll('.drag-source, .drag-over').forEach(el => {
+          el.classList.remove('drag-source', 'drag-over');
+        });
+      });
+    }
+
     function stickyOffset() {
       return document.querySelector('.topbar').offsetHeight +
-             document.querySelector('.day-headers').offsetHeight;
+        document.querySelector('.day-headers').offsetHeight;
     }
 
     function scrollSecToTop(sec, behavior) {
       const app = getApp();
-      const appTop = app.getBoundingClientRect().top;
+      const stickyBottom = document.querySelector('.day-headers').getBoundingClientRect().bottom;
       const rect = sec.getBoundingClientRect();
-      app.scrollTo({ top: app.scrollTop + rect.top - appTop - stickyOffset(), behavior });
+      app.scrollTo({ top: app.scrollTop + rect.top - stickyBottom, behavior });
     }
 
     // Append months below `y/m` until scrollTop can actually reach sec.offsetTop - stickyOffset()
@@ -1118,7 +1655,7 @@
       const sec = document.getElementById(`month-${y}-${m}`);
       if (!sec) return;
       let guard = 0;
-      while (sec.offsetTop - stickyOffset() + app.clientHeight > app.scrollHeight && guard++ < 8) {
+      while (sec.offsetTop - stickyOffset() + app.clientHeight > app.scrollHeight && guard++ < 8) { // guard: max 8 appends to prevent infinite loop
         appendNextMonth();
       }
     }
@@ -1169,10 +1706,10 @@
       loadObserver = new IntersectionObserver(entries => {
         for (const entry of entries) {
           if (!entry.isIntersecting) continue;
-          if (entry.target === topSentinel)    prependPrevMonth();
+          if (entry.target === topSentinel) prependPrevMonth();
           if (entry.target === bottomSentinel) appendNextMonth();
         }
-      }, { root: app, rootMargin: '300px' });
+      }, { root: app, rootMargin: '300px' }); // preload sentinels 300px before they enter the viewport
       loadObserver.observe(topSentinel);
       loadObserver.observe(bottomSentinel);
 
@@ -1181,14 +1718,15 @@
           if (entry.isIntersecting) {
             const sec = entry.target.closest('.month-section');
             if (sec) {
-              viewYear  = +sec.dataset.y;
+              viewYear = +sec.dataset.y;
               viewMonth = +sec.dataset.m;
               document.getElementById('monthLabel').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
             }
             break;
           }
         }
-      }, { root: app, rootMargin: `-${56 + 30}px 0px -55% 0px` });
+      }, { root: app, rootMargin: `-${stickyOffset()}px 0px -55% 0px` });
+      // -55%: only headings in the top half of the viewport update the label
     }
 
     function renderDayCell(date, ry, rm) {
@@ -1197,7 +1735,7 @@
       const isToday = y === today.getFullYear() && m === today.getMonth() && d === today.getDate();
 
       let cls = 'day-cell';
-      if (isToday)  cls += ' today';
+      if (isToday) cls += ' today';
       if (!inMonth) cls += ' out-of-month';
 
       const dateInner = d;
@@ -1212,7 +1750,7 @@
       const satIn = sm === rm && sy === ry;
       const sunIn = um === rm && uy === ry;
       const isToday = (sy === today.getFullYear() && sm === today.getMonth() && sd === today.getDate())
-                   || (uy === today.getFullYear() && um === today.getMonth() && ud === today.getDate());
+        || (uy === today.getFullYear() && um === today.getMonth() && ud === today.getDate());
 
       // Use whichever day is in-month as the data day (Saturday takes priority)
       const [y, m, d] = satIn ? [sy, sm, sd] : [uy, um, ud];
@@ -1220,7 +1758,7 @@
 
       let cls = 'day-cell weekend';
       if (!inMonth) cls += ' out-of-month';
-      if (isToday)  cls += ' today';
+      if (isToday) cls += ' today';
 
       const dateStr = satIn && sunIn ? `${sd} / ${ud}` : satIn ? `${sd}` : `${ud}`;
       const wk = weekKey(sat);
@@ -1250,7 +1788,8 @@
       const amTxt = abbr(am), pmTxt = abbr(pm);
       const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '');
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '');
-      return `<div class="person-row" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+      const draggable = (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
+      return `<div class="person-row"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
           <span class="${amCls}">${amTxt ? esc(amTxt) : '—'}</span>
@@ -1265,7 +1804,7 @@
     // ─────────────────────────────────────────────
     let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false };
 
-    const ONCALL_VALS  = ['none', 'single', 'double'];
+    const ONCALL_VALS = ['none', 'single', 'double'];
     const ONCALL_LABEL = { none: '<u>N</u>o call', single: '<u>S</u>ingle', double: '<u>D</u>ouble' };
     const ASSIGN_LABEL = { '': '— none —', unavailable: 'unavail' };
 
@@ -1274,7 +1813,7 @@
       const isWeekend = dow === 6 || dow === 0;
       const colA = isWeekend ? 'Sat' : 'AM';
       const colB = isWeekend ? 'Sun' : 'PM';
-      const dis  = isWeekend ? ' cg-disabled' : '';
+      const dis = isWeekend ? ' cg-disabled' : '';
 
       // Left column: assignment choices
       let assignHtml = `<div class="cg-grid">
@@ -1379,7 +1918,7 @@
         }
       });
       grid.querySelector('.edit-advance').addEventListener('click', saveAndAdvance);
-      grid.querySelector('.edit-cancel').addEventListener('click',  closeEdit);
+      grid.querySelector('.edit-cancel').addEventListener('click', closeEdit);
     }
 
     function setEditHighlight(y, m, d, person) {
@@ -1393,7 +1932,7 @@
     function openEdit(y, m, d, person) {
       editing = { y, m, d, person };
       const cell = getCell(y, m, d, person);
-      const dow  = DAYS[new Date(y, m, d).getDay()];
+      const dow = DAYS[new Date(y, m, d).getDay()];
 
       document.getElementById('editTitle').textContent =
         `${person} — ${dow} ${MONTHS[m]} ${d}`;
@@ -1499,10 +2038,10 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      const dow  = new Date(y, m, d).getDay();
+      const dow = new Date(y, m, d).getDay();
       const next = dow === 5 ? new Date(y, m, d + 1)
-                 : dow === 6 ? new Date(y, m, d + 2)
-                 :              new Date(y, m, d + 1);
+        : dow === 6 ? new Date(y, m, d + 2)
+          : new Date(y, m, d + 1);
       const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
       if (nm !== m || ny !== y) scrollToMonth(ny, nm);
       else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
@@ -1514,10 +2053,10 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      const dow  = new Date(y, m, d).getDay();
+      const dow = new Date(y, m, d).getDay();
       const prev = dow === 1 ? new Date(y, m, d - 2)   // Mon → skip back to Sat
-                 : dow === 0 ? new Date(y, m, d - 1)   // Sun → Sat
-                 :              new Date(y, m, d - 1);
+        : dow === 0 ? new Date(y, m, d - 1)   // Sun → Sat
+          : new Date(y, m, d - 1);
       const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
       if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
       else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
@@ -1530,9 +2069,9 @@
 
     document.addEventListener('keydown', e => {
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
-      if (e.key === 'Tab' && !e.shiftKey)  { e.preventDefault(); saveAndAdvance(); return; }
-      if (e.key === 'Tab' &&  e.shiftKey)  { e.preventDefault(); saveAndRetreat(); return; }
-      if (e.key === 'Enter')  { if (doSave() !== false) { const {y,m} = editing; closeEdit(); reRenderMonth(y, m); } return; }
+      if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); saveAndAdvance(); return; }
+      if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); saveAndRetreat(); return; }
+      if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
 
       const key = e.key.toLowerCase();
@@ -1569,8 +2108,14 @@
     // ─────────────────────────────────────────────
     function openSettings() {
       renderStaffList();
+      document.getElementById('signedInAs').textContent =
+        currentUser ? `Signed in as ${currentUser.email}` : '';
       document.getElementById('settingsOverlay').classList.add('open');
     }
+
+    document.getElementById('signOutBtn').addEventListener('click', async () => {
+      await sb.auth.signOut();
+    });
 
     function closeSettings() {
       syncStaffFromDOM();
@@ -1638,7 +2183,7 @@
           if (!dragSrc || dragSrc === item) return;
           syncStaffFromDOM();
           const from = parseInt(dragSrc.dataset.idx);
-          const to   = parseInt(item.dataset.idx);
+          const to = parseInt(item.dataset.idx);
           staff.splice(to, 0, staff.splice(from, 1)[0]);
           renderStaffList();
         });
@@ -1650,7 +2195,7 @@
       staff = [];
       items.forEach(item => {
         const short = item.querySelector('.staff-short').value.trim();
-        const full  = item.querySelector('.staff-full').value.trim();
+        const full = item.querySelector('.staff-full').value.trim();
         staff.push(short);
         if (short) {
           if (full) fullnames[short] = full;
@@ -1821,8 +2366,8 @@
     // ─────────────────────────────────────────────
     function setupDraggableSheet() {
       const overlay = document.getElementById('editOverlay');
-      const sheet   = overlay.querySelector('.sheet');
-      const handle  = sheet.querySelector('.sheet-handle');
+      const sheet = overlay.querySelector('.sheet');
+      const handle = sheet.querySelector('.sheet-handle');
       let dragging = false, startX, startY, startLeft, startTop;
 
       function beginDrag(cx, cy) {
@@ -1834,16 +2379,16 @@
       }
       function moveDrag(cx, cy) {
         if (!dragging) return;
-        const left = Math.max(0, Math.min(startLeft + cx - startX, window.innerWidth  - sheet.offsetWidth));
-        const top  = Math.max(0, Math.min(startTop  + cy - startY, window.innerHeight - sheet.offsetHeight));
+        const left = Math.max(0, Math.min(startLeft + cx - startX, window.innerWidth - sheet.offsetWidth));
+        const top = Math.max(0, Math.min(startTop + cy - startY, window.innerHeight - sheet.offsetHeight));
         sheet.style.left = left + 'px';
-        sheet.style.top  = top  + 'px';
+        sheet.style.top = top + 'px';
       }
       function endDrag() { dragging = false; }
 
-      handle.addEventListener('mousedown',  e => { beginDrag(e.clientX, e.clientY); e.preventDefault(); });
+      handle.addEventListener('mousedown', e => { beginDrag(e.clientX, e.clientY); e.preventDefault(); });
       document.addEventListener('mousemove', e => moveDrag(e.clientX, e.clientY));
-      document.addEventListener('mouseup',   endDrag);
+      document.addEventListener('mouseup', endDrag);
       handle.addEventListener('touchstart', e => { beginDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); }, { passive: false });
       document.addEventListener('touchmove', e => { if (dragging) { moveDrag(e.touches[0].clientX, e.touches[0].clientY); e.preventDefault(); } }, { passive: false });
       document.addEventListener('touchend', endDrag);
@@ -1893,19 +2438,18 @@
       }
 
       // Bariatric: call person if bariatric, else backup if bariatric, else dropdown
-      const bariPerson = bariatric[callPerson]   ? callPerson
-                       : bariatric[backupPerson] ? backupPerson
-                       : bariCall[wk] || '';
+      const bariPerson = bariatric[callPerson] ? callPerson
+        : bariatric[backupPerson] ? backupPerson
+          : bariCall[wk] || '';
 
       function set(id, name) {
         const el = document.getElementById(id);
         el.textContent = name ? displayName(name) : '—';
-        const isPrimary = el.classList.contains('primary');
-        el.className = 'ds-value' + (name ? '' : ' empty') + (isPrimary ? ' primary' : '');
+        el.className = 'ds-value' + (name ? '' : ' empty');
       }
-      set('ds-call',   callPerson);
+      set('ds-call', callPerson);
       set('ds-backup', backupPerson);
-      set('ds-bari',   bariPerson);
+      set('ds-bari', bariPerson);
     }
 
     setupObservers();
@@ -1918,17 +2462,16 @@
     //  remain visible, snap to the adjacent month
     // ─────────────────────────────────────────────
     (function setupScrollSnap() {
-      const ROW_PX   = 22;   // approx height of one person row (min-height 20 + margin 2)
-      const THRESHOLD = 6 * ROW_PX;  // ~132px
+      const ROW_PX = 22;      // approx height of one person row (min-height 20px + margin 2px)
+      const ROW_COUNT = 6;       // snap when fewer than this many rows remain visible
+      const THRESHOLD = ROW_COUNT * ROW_PX;
+      const DEBOUNCE = 160;     // ms to wait after scroll stops before evaluating snap
       let snapTimer = null;
-      let userScrolling = false;
 
       getApp().addEventListener('scroll', () => {
-        userScrolling = true;
         clearTimeout(snapTimer);
         snapTimer = setTimeout(() => {
-          userScrolling = false;
-          const sticky = stickyOffset();
+          const sticky = document.querySelector('.day-headers').getBoundingClientRect().bottom;
           const sections = [...document.querySelectorAll('.month-section')];
 
           for (let i = 0; i < sections.length; i++) {
@@ -1947,7 +2490,7 @@
               break;
             }
           }
-        }, 160);
+        }, DEBOUNCE);
       });
     })();
 
@@ -1957,4 +2500,5 @@
     });
   </script>
 </body>
+
 </html>
