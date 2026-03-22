@@ -1414,9 +1414,9 @@
     <!-- Top bar -->
     <div class="topbar">
       <div class="month-nav">
-        <button id="prevMonth" aria-label="Previous month">&#8249;</button>
+        <button id="prevMonth" aria-label="Previous month" title="Previous month (Page Up)">&#8249;</button>
         <span class="month-label" id="monthLabel"></span>
-        <button id="nextMonth" aria-label="Next month">&#8250;</button>
+        <button id="nextMonth" aria-label="Next month" title="Next month (Page Down)">&#8250;</button>
       </div>
       <div class="day-summary" id="daySummary">
         <div class="ds-call-group">
@@ -2440,6 +2440,7 @@
 
       const hintsHtml = `<div class="edit-hints">
         <span><kbd>Space</kbd> none</span>
+        <span><kbd>←</kbd> save &amp; back</span>
         <span><kbd>→</kbd> save &amp; next</span>
         <span><kbd>↓</kbd> save &amp; down</span>
         <span><kbd>Enter</kbd> save</span>
@@ -2720,7 +2721,7 @@
       }
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); saveAndAdvance(); return; }
-      if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); saveAndRetreat(); return; }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); saveAndRetreat(); return; }
       if (e.key === 'ArrowDown') { e.preventDefault(); saveAndAdvanceDown(); return; }
       if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
