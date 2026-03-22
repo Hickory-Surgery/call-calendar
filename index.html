@@ -2458,6 +2458,7 @@
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); saveAndAdvance(); return; }
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); saveAndRetreat(); return; }
+      if (e.key === 'ArrowDown') { e.preventDefault(); saveAndAdvanceDown(); return; }
       if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
 
