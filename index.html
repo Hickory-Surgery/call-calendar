@@ -2820,12 +2820,16 @@
 
             // Section straddles the sticky line — partially scrolled past
             if (rect.top < sticky && rect.bottom > sticky) {
-              const visibleBelow = rect.bottom - sticky;
+              const visibleBelow = rect.bottom - sticky;  // how much remains
+              const scrolledPast = sticky - rect.top;     // how much is hidden above
+
               if (visibleBelow < THRESHOLD && sections[i + 1]) {
-                // Less than 6 rows remain — snap to next month
+                // Almost past this month — snap forward to next
                 ensureHeadroom(+sections[i + 1].dataset.y, +sections[i + 1].dataset.m);
-                const snapTarget = sections[i + 1];
-                requestAnimationFrame(() => scrollSecToTop(snapTarget, 'smooth'));
+                requestAnimationFrame(() => scrollSecToTop(sections[i + 1], 'smooth'));
+              } else if (scrolledPast < THRESHOLD) {
+                // Barely into this month — snap back to its top
+                requestAnimationFrame(() => scrollSecToTop(sec, 'smooth'));
               }
               break;
             }
