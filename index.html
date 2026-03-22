@@ -1183,35 +1183,46 @@
       color: #90A4AE;
     }
 
-    /* ── Feed list ── */
-    .feed-row {
+    /* ── Subscribe button ── */
+    .sub-btn {
+      flex-shrink: 0;
+      font-size: 1rem;
+      line-height: 1;
+      padding: 2px 4px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      opacity: 0.5;
+      border-radius: 4px;
+      transition: opacity 0.15s;
+    }
+
+    .sub-btn:hover { opacity: 1; }
+    .sub-btn-disabled { opacity: 0.2; cursor: default; }
+    .sub-btn-copied { opacity: 1; font-size: 0.75rem; color: #2E7D32; }
+
+    .staff-item-readonly {
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-bottom: 8px;
+      padding: 6px 2px;
+      border-bottom: 1px solid #ECEFF1;
     }
 
-    .feed-name {
-      font-size: 0.82rem;
+    .staff-item-readonly:last-child { border-bottom: none; }
+
+    .staff-readonly-name {
       font-weight: 600;
-      color: #455A64;
-      min-width: 32px;
+      font-size: 0.85rem;
+      color: #263238;
+      min-width: 36px;
     }
 
-    .feed-copy-btn {
-      flex-shrink: 0;
-      font-size: 0.75rem;
-      padding: 4px 10px;
-      border: 1px solid #CFD8DC;
-      border-radius: 5px;
-      background: white;
-      color: #455A64;
-      cursor: pointer;
-      white-space: nowrap;
+    .staff-readonly-full {
+      font-size: 0.82rem;
+      color: #607D8B;
+      flex: 1;
     }
-
-    .feed-copy-btn:active { background: #ECEFF1; }
-    .feed-copy-btn.copied { color: #2E7D32; border-color: #A5D6A7; }
 
     /* ── Rates form ── */
     .rates-section {
@@ -1504,10 +1515,6 @@
             <button class="data-btn" id="saveRatesBtn">&#x2713; Save rates</button>
           </div>
 
-          <div class="rates-section admin-only" id="feedSection">
-            <div class="rates-section-title">Calendar Subscribe Links</div>
-            <div id="feedList"></div>
-          </div>
         </div>
 
         <div class="tab-panel" id="tab-account">
@@ -2724,9 +2731,9 @@
       // Show/hide tabs by role
       document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
         const t = btn.dataset.tab;
-        const visible = (t === 'staff' || t === 'users') ? admin
+        const visible = t === 'users' ? admin
           : t === 'data' ? (admin || scheduler)
-          : true; // account
+          : true; // staff + account visible to all
         btn.style.display = visible ? '' : 'none';
       });
 
@@ -2740,10 +2747,9 @@
         .find(b => b.style.display !== 'none');
       if (firstVisible) switchTab(firstVisible.dataset.tab);
 
+      renderStaffList();
       if (admin) {
-        renderStaffList();
         fetchProfiles().then(renderUsersList);
-        renderFeedList();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
@@ -2790,34 +2796,21 @@
 
     const ICAL_BASE = 'https://pkjlnjsswoadftkseffo.supabase.co/functions/v1/ical';
 
-    function renderFeedList() {
-      const list = document.getElementById('feedList');
-      if (!list) return;
-      list.innerHTML = staffRows.map(row => {
-        const token = row.feed_token;
-        const url = token ? `${ICAL_BASE}?person=${encodeURIComponent(row.short_name)}&token=${token}` : '';
-        return `<div class="feed-row">
-          <span class="feed-name">${esc(row.short_name)}</span>
-          <button class="feed-copy-btn" data-url="${esc(url)}" data-person="${esc(row.short_name)}"
-            ${!url ? 'disabled' : ''}>&#128279; Copy link</button>
-        </div>`;
-      }).join('');
-
-      list.querySelectorAll('.feed-copy-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-          navigator.clipboard.writeText(btn.dataset.url).then(() => {
-            btn.textContent = '✓ Copied!';
-            btn.classList.add('copied');
-            setTimeout(() => { btn.textContent = '🔗 Copy link'; btn.classList.remove('copied'); }, 2000);
-          });
-        });
-      });
-    }
-
     function renderStaffList() {
       const list = document.getElementById('staffList');
+      const admin = isAdmin();
       list.innerHTML = staff.map((name, i) => {
         const row = staffByShortName[name];
+        const token = row?.feed_token;
+        const feedUrl = token ? `${ICAL_BASE}?person=${encodeURIComponent(name)}&token=${token}` : '';
+        const subBtn = `<button class="sub-btn${!feedUrl ? ' sub-btn-disabled' : ''}" data-url="${esc(feedUrl)}" title="Copy subscribe link" aria-label="Copy subscribe link">&#128197;</button>`;
+        if (!admin) {
+          return `<div class="staff-item staff-item-readonly">
+            <span class="staff-readonly-name">${esc(name)}</span>
+            <span class="staff-readonly-full">${esc(fullnames[name] || '')}</span>
+            ${subBtn}
+          </div>`;
+        }
         return `
         <div class="staff-item" draggable="true" data-idx="${i}" data-id="${row ? row.id : ''}">
           <span class="drag-handle">&#8942;</span>
@@ -2827,6 +2820,7 @@
             <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
             Bari
           </label>
+          ${subBtn}
           <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
         </div>`;
       }).join('');
@@ -2873,6 +2867,19 @@
           const to = parseInt(item.dataset.idx);
           staff.splice(to, 0, staff.splice(from, 1)[0]);
           renderStaffList();
+        });
+      });
+
+      // Subscribe buttons — available to all roles
+      list.querySelectorAll('.sub-btn:not(.sub-btn-disabled)').forEach(btn => {
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          navigator.clipboard.writeText(btn.dataset.url).then(() => {
+            const prev = btn.innerHTML;
+            btn.innerHTML = '✓';
+            btn.classList.add('sub-btn-copied');
+            setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
+          });
         });
       });
     }
