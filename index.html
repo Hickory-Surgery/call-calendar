@@ -2259,12 +2259,15 @@
       }
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
+      if (isAdmin()) saveStaffToSupabase();
     }
 
     function renderStaffList() {
       const list = document.getElementById('staffList');
-      list.innerHTML = staff.map((name, i) => `
-        <div class="staff-item" draggable="true" data-idx="${i}">
+      list.innerHTML = staff.map((name, i) => {
+        const row = staffByShortName[name];
+        return `
+        <div class="staff-item" draggable="true" data-idx="${i}" data-id="${row ? row.id : ''}">
           <span class="drag-handle">&#8942;</span>
           <input type="text" class="staff-short" value="${esc(name)}" placeholder="Short">
           <input type="text" class="staff-full" value="${esc(fullnames[name] || '')}" placeholder="Full name">
@@ -2273,8 +2276,8 @@
             Bari
           </label>
           <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
-        </div>
-      `).join('');
+        </div>`;
+      }).join('');
 
       // Bariatric checkbox toggles
       list.querySelectorAll('.bari-check').forEach(cb => {
@@ -2334,6 +2337,51 @@
           else delete fullnames[short];
         }
       });
+    }
+
+    async function saveStaffToSupabase() {
+      const items = document.querySelectorAll('#staffList .staff-item');
+      const keptIds = new Set();
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const id = item.dataset.id;
+        const short = item.querySelector('.staff-short').value.trim();
+        const full = item.querySelector('.staff-full').value.trim();
+        const isBari = item.querySelector('.bari-check').checked;
+        if (!short) continue;
+
+        if (id) {
+          keptIds.add(id);
+          const { error } = await sb.from('staff').update({
+            short_name: short,
+            display_name: full || short,
+            is_bariatric: isBari,
+            sort_order: i,
+          }).eq('id', id);
+          if (error) { showToast('Staff save failed — please try again.'); return; }
+        } else {
+          const { data: inserted, error } = await sb.from('staff').insert({
+            short_name: short,
+            display_name: full || short,
+            is_bariatric: isBari,
+            sort_order: i,
+            active: true,
+          }).select('id').single();
+          if (error) { showToast('Staff save failed — please try again.'); return; }
+          if (inserted) item.dataset.id = inserted.id;
+        }
+      }
+
+      // Soft-delete any staff rows that were removed
+      for (const row of staffRows) {
+        if (!keptIds.has(row.id)) {
+          await sb.from('staff').update({ active: false }).eq('id', row.id);
+        }
+      }
+
+      await fetchStaff();
+      render();
     }
 
     document.getElementById('addStaffBtn').addEventListener('click', () => {
