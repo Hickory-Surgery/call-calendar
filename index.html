@@ -1390,6 +1390,7 @@
       <div class="sheet-handle"></div>
       <div class="sheet-title-row">
         <div class="sheet-title" id="editTitle"></div>
+        <button class="btn-clear-inline" id="editUndoBtn" style="margin-right:6px;">↩ Undo</button>
         <button class="btn-clear-inline" id="editClearBtn">Clear</button>
       </div>
 
@@ -2423,6 +2424,7 @@
       };
       renderChoiceGrid();
       setEditHighlight(y, m, d, person);
+      syncUndoBtn();
       document.getElementById('editOverlay').classList.add('open');
     }
 
@@ -2491,6 +2493,7 @@
 
       setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
       updateDaySummary();
+      syncUndoBtn();
       return true;
     }
 
@@ -2549,11 +2552,17 @@
       if (e.target === document.getElementById('editOverlay')) closeEdit();
     });
 
+    function syncUndoBtn() {
+      const btn = document.getElementById('editUndoBtn');
+      if (!btn) return;
+      btn.disabled = undoStack.length === 0;
+      btn.style.opacity = undoStack.length === 0 ? '0.35' : '';
+    }
+
     function undoLastChange() {
-      if (!undoStack.length) { showToast('Nothing to undo.'); return; }
+      if (!undoStack.length) return;
       const { y, m, d, person, prev } = undoStack.pop();
       const key = cellKey(y, m, d, person);
-      // Restore previous state without pushing to undo stack again
       if (prev !== undefined) {
         data[key] = prev;
         const staffRow = staffByShortName[person];
@@ -2580,19 +2589,12 @@
         }
       }
       reRenderMonth(y, m);
-      showToast(`Undid change to ${person}.`);
+      syncUndoBtn();
     }
 
+    document.getElementById('editUndoBtn').addEventListener('click', undoLastChange);
+
     document.addEventListener('keydown', e => {
-      // CMD+Z / Ctrl+Z — undo, works any time editing is not capturing text
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
-        const tag = document.activeElement?.tagName;
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-          e.preventDefault();
-          undoLastChange();
-          return;
-        }
-      }
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); saveAndAdvance(); return; }
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); saveAndRetreat(); return; }
