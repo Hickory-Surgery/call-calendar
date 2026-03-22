@@ -966,10 +966,13 @@
 
     .tab-panels {
       display: grid;
+      overflow: hidden;
     }
 
     .tab-panel {
       grid-area: 1 / 1;
+      min-width: 0;
+      width: 100%;
       visibility: hidden;
       pointer-events: none;
     }
