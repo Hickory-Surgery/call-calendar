@@ -2091,8 +2091,8 @@
       const isToday = (sy === today.getFullYear() && sm === today.getMonth() && sd === today.getDate())
         || (uy === today.getFullYear() && um === today.getMonth() && ud === today.getDate());
 
-      // Use whichever day is in-month as the data day (Saturday takes priority)
-      const [y, m, d] = satIn ? [sy, sm, sd] : [uy, um, ud];
+      // Weekend data is always stored under Saturday's date
+      const [y, m, d] = [sy, sm, sd];
       const inMonth = satIn || sunIn;
 
       let cls = 'day-cell weekend';
@@ -2147,8 +2147,8 @@
         </div>`;
       }
       const amTxt = abbr(am), pmTxt = abbr(pm);
-      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '') + (amIn ? '' : ' slot-out');
-      const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
+      const amCls = 'am-val' + (amTxt ? '' : ' empty') + (amIn && oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (amIn && exception ? ' exception' : '') + (amIn ? '' : ' slot-out');
+      const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (pmIn && oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
       const draggable = (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
