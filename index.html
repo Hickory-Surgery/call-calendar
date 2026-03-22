@@ -329,6 +329,12 @@
       background: transparent;
     }
 
+    /* Hosp band: light gray spanning first→last hosp row within a day column.
+       Specificity kept at 1 class so oncall colors on closed rows always win. */
+    .hosp-band {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
     .editing-highlight {
       outline: 2px solid #1565C0;
       outline-offset: 1px;
@@ -2058,7 +2064,11 @@
 
       const dateInner = d;
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
-      if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
+      if (inMonth) {
+        const band = hospBandRange(y, m, d);
+        for (let i = 0; i < staff.length; i++)
+          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1]);
+      }
       return html + '</div>';
     }
 
@@ -2090,16 +2100,34 @@
         : '';
 
       let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
-      if (inMonth) for (const person of staff) html += personRowHtml(y, m, d, person);
+      if (inMonth) {
+        const band = hospBandRange(y, m, d);
+        for (let i = 0; i < staff.length; i++)
+          html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1]);
+      }
       return html + '</div>';
     }
 
-    function personRowHtml(y, m, d, person) {
+    // Returns [firstIdx, lastIdx] of staff with any hosp assignment on (y,m,d), or null.
+    function hospBandRange(y, m, d) {
+      let first = -1, last = -1;
+      for (let i = 0; i < staff.length; i++) {
+        const c = getCell(y, m, d, staff[i]);
+        if (c.am === 'hosp' || c.pm === 'hosp') {
+          if (first === -1) first = i;
+          last = i;
+        }
+      }
+      return first !== -1 ? [first, last] : null;
+    }
+
+    function personRowHtml(y, m, d, person, inBand) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
       const nm = esc(shortName(person));
+      const bandCls = inBand ? ' hosp-band' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
-        return `<div class="closed-row${callCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+        return `<div class="closed-row${callCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
@@ -2107,7 +2135,7 @@
       const amCls = 'am-val' + (amTxt ? '' : ' empty') + (oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (exception ? ' exception' : '');
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '');
       const draggable = (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
-      return `<div class="person-row"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+      return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
           <span class="${amCls}">${amTxt ? esc(amTxt) : '—'}</span>
