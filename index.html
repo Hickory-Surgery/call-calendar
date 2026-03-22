@@ -122,6 +122,33 @@
       background: rgba(255, 255, 255, 0.28);
     }
 
+    .today-icon-btn { padding: 0; overflow: hidden; }
+
+    .today-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 26px;
+      border-radius: 5px;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    }
+
+    .today-icon-bar {
+      width: 100%;
+      height: 7px;
+      background: #E53935;
+    }
+
+    .today-icon-num {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #263238;
+      line-height: 1;
+      padding: 2px 0 3px;
+    }
+
     /* ── Day-of-week header ── */
     .day-headers {
       display: grid;
@@ -1408,7 +1435,12 @@
         </div>
       </div>
       <div class="topbar-actions">
-        <button class="icon-btn" id="todayBtn" title="Go to today">&#9711;</button>
+        <button class="icon-btn today-icon-btn" id="todayBtn" title="Go to today">
+          <span class="today-icon">
+            <span class="today-icon-bar"></span>
+            <span class="today-icon-num" id="todayNum"></span>
+          </span>
+        </button>
         <button class="icon-btn" id="settingsBtn" title="Settings">&#9881;</button>
       </div>
     </div>
@@ -1633,6 +1665,7 @@
 
     const today = new Date();
     history.scrollRestoration = 'manual';
+    document.getElementById('todayNum').textContent = today.getDate();
 
     let viewYear = today.getFullYear();
     let viewMonth = today.getMonth();
