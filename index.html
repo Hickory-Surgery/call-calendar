@@ -1116,6 +1116,57 @@
       background: #FFF3E0;
     }
 
+    .totals-dollars {
+      background: #F1F8E9;
+    }
+
+    /* ── Rates form ── */
+    .rates-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #ECEFF1;
+    }
+
+    .rates-section-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: #607D8B;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 10px;
+    }
+
+    .rates-grid {
+      display: grid;
+      grid-template-columns: auto 1fr 1fr;
+      gap: 6px 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .rates-col-hdr {
+      font-size: 0.72rem;
+      font-weight: 600;
+      color: #78909C;
+      text-align: center;
+    }
+
+    .rates-row-lbl {
+      font-size: 0.82rem;
+      color: #455A64;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .rates-input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 5px 7px;
+      border: 1px solid #CFD8DC;
+      border-radius: 5px;
+      font-size: 0.85rem;
+      color: #263238;
+    }
 
     .users-list {
       display: flex;
@@ -1342,6 +1393,22 @@
           <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
           <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
           <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+
+          <div class="rates-section admin-only" id="ratesSection">
+            <div class="rates-section-title">Call Rates</div>
+            <div class="rates-grid">
+              <div></div>
+              <div class="rates-col-hdr">Weekday</div>
+              <div class="rates-col-hdr">Weekend</div>
+              <div class="rates-row-lbl">Frye</div>
+              <input type="number" id="rateFryeWd" class="rates-input" step="0.01" min="0" placeholder="0.00">
+              <input type="number" id="rateFryeWe" class="rates-input" step="0.01" min="0" placeholder="0.00">
+              <div class="rates-row-lbl">CMVC</div>
+              <input type="number" id="rateCmvcWd" class="rates-input" step="0.01" min="0" placeholder="0.00">
+              <input type="number" id="rateCmvcWe" class="rates-input" step="0.01" min="0" placeholder="0.00">
+            </div>
+            <button class="data-btn" id="saveRatesBtn">&#x2713; Save rates</button>
+          </div>
         </div>
 
         <div class="tab-panel" id="tab-account">
@@ -2510,6 +2577,12 @@
       if (admin) {
         renderStaffList();
         fetchProfiles().then(renderUsersList);
+        fetchCurrentRates().then(rates => {
+          document.getElementById('rateFryeWd').value = rates.frye_weekday;
+          document.getElementById('rateFryeWe').value = rates.frye_weekend;
+          document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
+          document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
+        });
       }
       document.getElementById('signedInAs').textContent =
         currentUser ? `Signed in as ${currentUser.email}` : '';
@@ -2522,6 +2595,19 @@
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
       await sb.auth.signOut();
+    });
+
+    document.getElementById('saveRatesBtn').addEventListener('click', async () => {
+      const frye_weekday = parseFloat(document.getElementById('rateFryeWd').value) || 0;
+      const frye_weekend = parseFloat(document.getElementById('rateFryeWe').value) || 0;
+      const cmvc_weekday = parseFloat(document.getElementById('rateCmvcWd').value) || 0;
+      const cmvc_weekend = parseFloat(document.getElementById('rateCmvcWe').value) || 0;
+      const effective_date = new Date().toISOString().slice(0, 10);
+      const { error } = await sb.from('call_rates').insert(
+        { effective_date, frye_weekday, frye_weekend, cmvc_weekday, cmvc_weekend }
+      );
+      if (error) { showToast('Save rates failed — please try again.'); return; }
+      showToast('Rates saved.');
     });
 
     function closeSettings() {
@@ -2674,51 +2760,80 @@
     // ─────────────────────────────────────────────
     //  Totals panel
     // ─────────────────────────────────────────────
-    function openTotals() {
+
+    async function fetchCurrentRates() {
+      const monthStart = isoFromParts(viewYear, viewMonth, 1);
+      const { data } = await sb.from('call_rates')
+        .select('frye_weekday,frye_weekend,cmvc_weekday,cmvc_weekend')
+        .lte('effective_date', monthStart)
+        .order('effective_date', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data || { frye_weekday: 0, frye_weekend: 0, cmvc_weekday: 0, cmvc_weekend: 0 };
+    }
+
+    async function openTotals() {
       closeSettings();
       const y = viewYear, m = viewMonth;
       const days = new Date(y, m + 1, 0).getDate();
+      const admin = isAdmin();
 
-      // Count on-call days per person.
+      // Count on-call days per person, split by weekday vs weekend.
       // Weekdays (Mon–Fri): AM+PM together = 1 day.
       // Saturday: oncall_am only = 1 day.
       // Sunday: oncall_pm from Saturday's cell = 1 day.
       const rows = staff.map(person => {
-        let frye = 0, cmvc = 0;
+        let wd_frye = 0, wd_cmvc = 0, we_frye = 0, we_cmvc = 0;
         for (let d = 1; d <= days; d++) {
           const dow = new Date(y, m, d).getDay();
           if (dow === 0) {
             // Sunday — data lives in Saturday's cell (may be prev month)
             const sat = new Date(y, m, d - 1);
             const c = getCell(sat.getFullYear(), sat.getMonth(), sat.getDate(), person);
-            if (c.oncall_pm !== 'none') frye++;
-            if (c.oncall_pm === 'double') cmvc++;
+            if (c.oncall_pm !== 'none') we_frye++;
+            if (c.oncall_pm === 'double') we_cmvc++;
           } else if (dow === 6) {
             // Saturday — am slot only
             const c = getCell(y, m, d, person);
-            if (c.oncall_am !== 'none') frye++;
-            if (c.oncall_am === 'double') cmvc++;
+            if (c.oncall_am !== 'none') we_frye++;
+            if (c.oncall_am === 'double') we_cmvc++;
           } else {
             // Weekday — am+pm together = 1 day
             const c = getCell(y, m, d, person);
-            if (c.oncall_am !== 'none' || c.oncall_pm !== 'none') frye++;
-            if (c.oncall_am === 'double' || c.oncall_pm === 'double') cmvc++;
+            if (c.oncall_am !== 'none' || c.oncall_pm !== 'none') wd_frye++;
+            if (c.oncall_am === 'double' || c.oncall_pm === 'double') wd_cmvc++;
           }
         }
-        return { person, frye, cmvc };
+        return { person,
+          frye: wd_frye + we_frye,
+          cmvc: wd_cmvc + we_cmvc,
+          wd_frye, we_frye, wd_cmvc, we_cmvc };
       });
 
       const totalFrye = rows.reduce((s, r) => s + r.frye, 0);
       const totalCmvc = rows.reduce((s, r) => s + r.cmvc, 0);
 
+      // Fetch rates for $ calculation (admin only)
+      let rates = null;
+      if (admin) rates = await fetchCurrentRates();
+
+      const fmt = v => v === 0 ? '—' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const calcDollars = r => r.wd_frye * rates.frye_weekday + r.we_frye * rates.frye_weekend
+        + r.wd_cmvc * rates.cmvc_weekday + r.we_cmvc * rates.cmvc_weekend;
+
       document.getElementById('totalsTitle').textContent = `Totals — ${MONTHS[m]} ${y}`;
 
-      const rowsHtml = rows.map(r => `
-        <tr>
+      const rowsHtml = rows.map(r => {
+        const dollars = admin ? calcDollars(r) : 0;
+        return `<tr>
           <td>${esc(r.person)}</td>
           <td class="totals-frye">${r.frye || '—'}</td>
           <td class="totals-cmvc">${r.cmvc || '—'}</td>
-        </tr>`).join('');
+          ${admin ? `<td class="totals-dollars">${fmt(dollars)}</td>` : ''}
+        </tr>`;
+      }).join('');
+
+      const totalDollars = admin ? rows.reduce((s, r) => s + calcDollars(r), 0) : 0;
 
       document.getElementById('totalsTable').innerHTML = `
         <table class="totals-table">
@@ -2727,6 +2842,7 @@
               <th>Staff</th>
               <th class="totals-frye">Frye</th>
               <th class="totals-cmvc">CMVC</th>
+              ${admin ? '<th class="totals-dollars">$</th>' : ''}
             </tr>
           </thead>
           <tbody>
@@ -2735,6 +2851,7 @@
               <td>Total</td>
               <td class="totals-frye">${totalFrye || '—'}</td>
               <td class="totals-cmvc">${totalCmvc || '—'}</td>
+              ${admin ? `<td class="totals-dollars">${fmt(totalDollars)}</td>` : ''}
             </tr>
           </tbody>
         </table>`;
