@@ -2817,8 +2817,8 @@
       const days = new Date(y, m + 1, 0).getDate();
       const admin = isAdmin();
 
-      // Count on-call days per person, split by weekday vs weekend.
-      // Weekdays (Mon–Fri): AM+PM together = 1 day.
+      // Count on-call days per person, split by weekday vs weekend rate.
+      // Weekday rate: Mon–Thu. Weekend rate: Fri, Sat, Sun.
       // Saturday: oncall_am only = 1 day.
       // Sunday: oncall_pm from Saturday's cell = 1 day.
       const rows = staff.map(person => {
@@ -2837,10 +2837,17 @@
             if (c.oncall_am !== 'none') we_frye++;
             if (c.oncall_am === 'double') we_cmvc++;
           } else {
-            // Weekday — am+pm together = 1 day
+            // Mon–Thu = weekday rate; Fri = weekend rate
             const c = getCell(y, m, d, person);
-            if (c.oncall_am !== 'none' || c.oncall_pm !== 'none') wd_frye++;
-            if (c.oncall_am === 'double' || c.oncall_pm === 'double') wd_cmvc++;
+            const oncall = c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+            const double_ = c.oncall_am === 'double' || c.oncall_pm === 'double';
+            if (dow === 5) {
+              if (oncall) we_frye++;
+              if (double_) we_cmvc++;
+            } else {
+              if (oncall) wd_frye++;
+              if (double_) wd_cmvc++;
+            }
           }
         }
         return { person,
