@@ -1,5 +1,4 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { SmtpClient } from 'https://deno.land/x/denomailer@1.3.0/mod.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -12,11 +11,11 @@ Deno.serve(async (req) => {
     return new Response(null, { status: 204, headers: CORS })
   }
 
-  console.log('notify-new-user invoked', req.method)
-
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: CORS })
   }
+
+  console.log('notify-new-user invoked')
 
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
@@ -34,9 +33,9 @@ Deno.serve(async (req) => {
   )
   if (authError || !user?.email) {
     console.log('Auth error:', authError?.message)
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized', { status: 401, headers: CORS })
   }
-  console.log('User:', user.email)
+  console.log('New user:', user.email)
 
   // Idempotency: only notify once per user
   const { data: existing } = await sb
@@ -58,7 +57,7 @@ Deno.serve(async (req) => {
     .select('id')
     .eq('role', 'admin')
 
-  console.log('Admin profiles found:', adminProfiles?.length ?? 0)
+  console.log('Admins found:', adminProfiles?.length ?? 0)
 
   if (!adminProfiles?.length) {
     return new Response('No admins found', { status: 200, headers: CORS })
@@ -76,28 +75,30 @@ Deno.serve(async (req) => {
     return new Response('No admin emails found', { status: 200, headers: CORS })
   }
 
-  // Send via Gmail SMTP
-  const client = new SmtpClient()
-  await client.connectTLS({
-    hostname: 'smtp.gmail.com',
-    port: 465,
-    username: Deno.env.get('SMTP_USER')!,
-    password: Deno.env.get('SMTP_PASS')!,
+  // Send via Resend
+  const resendRes = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: 'Call Calendar <onboarding@resend.dev>',
+      to: adminEmails,
+      subject: 'New user requesting access — Call Calendar',
+      text: `A new user signed in and is waiting for access:\n\n  ${user.email}\n\nLog in and go to Settings → Users to approve them.`,
+      html: `<p>A new user signed in and is waiting for access:</p><p style="font-size:1.1em;font-weight:bold">${user.email}</p><p>Log in and go to <strong>Settings → Users</strong> to approve them.</p>`,
+    }),
   })
 
-  for (const to of adminEmails) {
-    await client.send({
-      from: Deno.env.get('SMTP_USER')!,
-      to,
-      subject: 'New user requesting access — Call Calendar',
-      content: `A new user signed in and is waiting for access:\n\n  ${user.email}\n\nLog in and go to Settings → Users to approve them.`,
-      html: `<p>A new user signed in and is waiting for access:</p><p style="font-size:1.1em;font-weight:bold">${user.email}</p><p>Log in and go to <strong>Settings → Users</strong> to approve them.</p>`,
-    })
+  const resendBody = await resendRes.json()
+  console.log('Resend response:', resendRes.status, JSON.stringify(resendBody))
+
+  if (!resendRes.ok) {
+    return new Response('Email failed', { status: 500, headers: CORS })
   }
 
-  await client.close()
-  console.log('Email sent to:', adminEmails.join(', '))
-
+  // Mark notified
   await sb
     .from('pending_users')
     .update({ notified_at: new Date().toISOString() })
