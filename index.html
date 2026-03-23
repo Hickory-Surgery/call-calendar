@@ -2396,16 +2396,12 @@
     // ─────────────────────────────────────────────
     let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false };
 
-    // Apply a value to the active slot(s). On weekend slot edits, only the targeted slot changes.
+    // Apply a value to both slots (label clicks and keyboard shortcuts set both Sat and Sun together).
     function applySlotVal(val) {
-      const s = editing && editing.slot;
-      if (!s || s === 'am') editState.am = val;
-      if (!s || s === 'pm') editState.pm = val;
+      editState.am = editState.pm = val;
     }
     function applySlotOncall(val) {
-      const s = editing && editing.slot;
-      if (!s || s === 'am') editState.oncall_am = val;
-      if (!s || s === 'pm') editState.oncall_pm = val;
+      editState.oncall_am = editState.oncall_pm = val;
     }
 
     const ONCALL_VALS = ['none', 'single', 'double'];
@@ -2417,10 +2413,8 @@
       const isWeekend = dow === 6 || dow === 0;
       const colA = isWeekend ? 'Sat' : 'AM';
       const colB = isWeekend ? 'Sun' : 'PM';
-      const slot = editing && editing.slot;
-      // Per-column disable: on a weekend slot edit, disable the column not being edited
-      const disAM = (isWeekend && slot === 'pm') ? ' cg-disabled' : '';
-      const disPM = (isWeekend && slot === 'am') ? ' cg-disabled' : '';
+      const disAM = '';
+      const disPM = '';
 
       // Left column: assignment choices
       let assignHtml = `<div class="cg-grid">
@@ -2761,10 +2755,9 @@
         renderChoiceGrid();
         return;
       }
-      // 'b' cycles ba-C → ba-F → ba-C (reads from active slot)
+      // 'b' cycles ba-C → ba-F → ba-C
       if (key === 'b') {
-        const curVal = (editing && editing.slot === 'pm') ? editState.pm : editState.am;
-        applySlotVal(curVal === 'ba-C' ? 'ba-F' : 'ba-C');
+        applySlotVal(editState.am === 'ba-C' ? 'ba-F' : 'ba-C');
         renderChoiceGrid(); return;
       }
       if (key === 'n') {
