@@ -759,6 +759,14 @@
       grid-template-columns: max-content 36px 36px;
     }
 
+    .cg-grid.cg-single {
+      grid-template-columns: max-content 42px;
+    }
+
+    .cg-oncall.cg-single {
+      grid-template-columns: max-content 36px;
+    }
+
     .action-grid {
       display: flex;
       flex-direction: column;
@@ -2533,40 +2541,55 @@
     function renderChoiceGrid() {
       const dow = editing && new Date(editing.y, editing.m, editing.d).getDay();
       const isWeekend = dow === 6 || dow === 0;
-      const colA = isWeekend ? 'Sat' : 'AM';
-      const colB = isWeekend ? 'Sun' : 'PM';
-      const disAM = '';
-      const disPM = '';
 
-      // Left column: assignment choices
-      let assignHtml = `<div class="cg-grid">
-        <div></div>
-        <div class="cg-col-hdr">${colA}</div>
-        <div class="cg-col-hdr">${colB}</div>`;
+      let assignHtml, oncallHtml;
 
-      for (const val of ASSIGNMENTS) {
-        assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
-          <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}${disAM}" data-val="${esc(val)}"></button>
-          <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}${disPM}" data-val="${esc(val)}"></button>`;
+      if (isWeekend) {
+        // Weekend: two independent columns (Sat / Sun)
+        assignHtml = `<div class="cg-grid">
+          <div></div>
+          <div class="cg-col-hdr">Sat</div>
+          <div class="cg-col-hdr">Sun</div>`;
+        for (const val of ASSIGNMENTS) {
+          assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
+            <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>
+            <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
+        }
+        assignHtml += '</div>';
+
+        oncallHtml = `<div class="cg-grid cg-oncall">
+          <div></div>
+          <div class="cg-col-hdr">Sat</div>
+          <div class="cg-col-hdr">Sun</div>`;
+        for (const val of ONCALL_VALS) {
+          oncallHtml += `<div class="cg-label" data-oncall="${val}" style="cursor:pointer">${ONCALL_LABEL[val]}</div>
+            <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>
+            <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
+        }
+        oncallHtml += `<div class="cg-divider"></div>
+          <div class="cg-label" data-oncall="exception" style="cursor:pointer"><u>E</u>xception</div>
+          <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}"></button>
+          <button class="cg-btn cg-disabled"></button>`;
+        oncallHtml += '</div>';
+      } else {
+        // Weekday: single column (sets both AM and PM together)
+        assignHtml = `<div class="cg-grid cg-single">`;
+        for (const val of ASSIGNMENTS) {
+          assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
+            <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
+        }
+        assignHtml += '</div>';
+
+        oncallHtml = `<div class="cg-grid cg-oncall cg-single">`;
+        for (const val of ONCALL_VALS) {
+          oncallHtml += `<div class="cg-label" data-oncall="${val}" style="cursor:pointer">${ONCALL_LABEL[val]}</div>
+            <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}" data-val="${val}"></button>`;
+        }
+        oncallHtml += `<div class="cg-divider"></div>
+          <div class="cg-label" data-oncall="exception" style="cursor:pointer"><u>E</u>xception</div>
+          <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}"></button>`;
+        oncallHtml += '</div>';
       }
-      assignHtml += '</div>';
-
-      // Right column: on-call + action buttons
-      let oncallHtml = `<div class="cg-grid cg-oncall">
-        <div></div>
-        <div class="cg-col-hdr">${colA}</div>
-        <div class="cg-col-hdr">${colB}</div>`;
-
-      for (const val of ONCALL_VALS) {
-        oncallHtml += `<div class="cg-label" data-oncall="${val}" style="cursor:pointer">${ONCALL_LABEL[val]}</div>
-          <button class="cg-btn oncall-am${editState.oncall_am === val ? ' active' : ''} ${val !== 'none' ? val : ''}${disAM}" data-val="${val}"></button>
-          <button class="cg-btn oncall-pm${editState.oncall_pm === val ? ' active' : ''} ${val !== 'none' ? val : ''}${disPM}" data-val="${val}"></button>`;
-      }
-      oncallHtml += `<div class="cg-divider"></div>
-        <div class="cg-label" data-oncall="exception" style="cursor:pointer"><u>E</u>xception</div>
-        <button class="cg-btn exception-am${editState.exception ? ' active exception' : ''}${disAM}"></button>
-        <button class="cg-btn cg-disabled"></button>`;
-      oncallHtml += '</div>';
 
       const actionsHtml = `<div class="action-grid">
         <button class="btn btn-cancel  edit-cancel">Cancel</button>
@@ -2603,7 +2626,7 @@
             }
             closeEdit(); reRenderMonth(y, m); return;
           }
-          applySlotVal(val);
+          if (isWeekend) { editState.am = val; } else { applySlotVal(val); }
           renderChoiceGrid();
         }));
 
@@ -2612,7 +2635,8 @@
 
       grid.querySelectorAll('.oncall-am').forEach(btn =>
         btn.addEventListener('click', () => {
-          applySlotOncall(btn.dataset.val); renderChoiceGrid();
+          if (isWeekend) { editState.oncall_am = btn.dataset.val; } else { applySlotOncall(btn.dataset.val); }
+          renderChoiceGrid();
         }));
 
       grid.querySelectorAll('.oncall-pm').forEach(btn =>
