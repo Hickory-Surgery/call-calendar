@@ -1137,6 +1137,11 @@
       background: rgba(255,255,255,0.35);
     }
 
+    /* Hidden by default; JS shows it only for real admins not in preview mode */
+    #viewAsSection {
+      display: none;
+    }
+
     /* View-as toggle buttons in Account tab */
     .view-as-row {
       display: flex;
@@ -1622,7 +1627,7 @@
           <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
           <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
 
-          <div id="viewAsSection" style="display:none; margin-top:16px; border-top:1px solid #ECEFF1; padding-top:14px;">
+          <div id="viewAsSection" style="margin-top:16px; border-top:1px solid #ECEFF1; padding-top:14px;">
             <div style="font-size:0.78rem; font-weight:600; color:#546E7A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Preview as role</div>
             <div class="view-as-row">
               <button class="view-as-btn" data-role="admin">Admin</button>
