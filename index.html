@@ -2143,11 +2143,16 @@
         const isWeekend = new Date(y, m, d).getDay() === 6;
         let half;
         if (isWeekend) {
-          // Weekend: dragging from Sun (pm-val) moves only Sunday; dragging from Sat moves only Saturday
           const pmDrag = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.pm-val'));
-          if (pmDrag && cell.oncall_pm === 'none') { e.preventDefault(); return; }
-          if (!pmDrag && cell.oncall_am === 'none') { e.preventDefault(); return; }
-          half = pmDrag ? 'pm' : 'am';
+          if (pmDrag) {
+            // Sun (PM) side: always drags independently
+            if (cell.oncall_pm === 'none') { e.preventDefault(); return; }
+            half = 'pm';
+          } else {
+            // Sat (AM) side: drags whole pill if intact; drags only AM if already split
+            if (cell.oncall_am === 'none') { e.preventDefault(); return; }
+            half = cell.oncall_pm !== 'none' ? 'both' : 'am';
+          }
         } else {
           // Weekday: dragging from either end moves the whole pill
           half = 'both';
