@@ -1743,6 +1743,7 @@
         } catch (e) {
           console.error('notify-new-user failed:', e);
         }
+        sessionApplied = false;
         await sb.auth.signOut();
         loginScreen.classList.remove('checking');
         loginScreen.querySelector('.login-sub').textContent = 'Access not authorised. Contact an admin.';
