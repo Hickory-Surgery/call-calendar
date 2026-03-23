@@ -2256,8 +2256,11 @@
       });
     }
 
-    document.querySelectorAll('.audit-sort-btn').forEach(btn => {
-      btn.addEventListener('click', () => { auditSortBy = btn.dataset.sort; renderAuditLog(); });
+    document.getElementById('tab-log').addEventListener('click', e => {
+      const btn = e.target.closest('.audit-sort-btn');
+      if (!btn) return;
+      auditSortBy = btn.dataset.sort;
+      renderAuditLog();
     });
 
     document.getElementById('addUserBtn').addEventListener('click', async () => {
