@@ -2212,7 +2212,8 @@
         if (auditSortBy === 'calendar_date') {
           const ad = (a.new_row ?? a.old_row)?.date ?? '';
           const bd = (b.new_row ?? b.old_row)?.date ?? '';
-          return bd.localeCompare(ad);
+          if (bd !== ad) return bd.localeCompare(ad);
+          return new Date(b.changed_at) - new Date(a.changed_at); // tie-break by change time
         }
         return new Date(b.changed_at) - new Date(a.changed_at);
       });
@@ -2241,6 +2242,8 @@
           </div>
           <div class="audit-detail" id="audit-detail-${i}" style="display:none">${renderAuditDetail(row)}</div>`;
       }).join('');
+
+      container.scrollTop = 0;
 
       container.querySelectorAll('.audit-row').forEach(row => {
         row.addEventListener('click', () => {
