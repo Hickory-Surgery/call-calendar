@@ -1446,6 +1446,122 @@
 
     .approve-btn:hover { background: #388E3C; }
 
+    /* ── Audit log tab ── */
+    .audit-sort-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .audit-sort-btn {
+      background: #ECEFF1;
+      border: none;
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #546E7A;
+      cursor: pointer;
+    }
+
+    .audit-sort-btn.active {
+      background: var(--header-bg);
+      color: white;
+    }
+
+    .audit-log-list {
+      overflow-y: auto;
+      max-height: 340px;
+      border: 1px solid #E0E7EF;
+      border-radius: 6px;
+    }
+
+    .audit-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      cursor: pointer;
+      border-bottom: 1px solid #F0F4F8;
+      font-size: 0.78rem;
+    }
+
+    .audit-row:last-of-type { border-bottom: none; }
+    .audit-row:hover { background: #F5F7F9; }
+    .audit-row.expanded { background: #EEF2FF; }
+
+    .audit-op {
+      font-size: 0.68rem;
+      font-weight: 700;
+      border-radius: 3px;
+      padding: 1px 5px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .op-insert { background: #E8F5E9; color: #2E7D32; }
+    .op-update { background: #E3F2FD; color: #1565C0; }
+    .op-delete { background: #FFEBEE; color: #C62828; }
+
+    .audit-person {
+      font-weight: 600;
+      color: #263238;
+      flex-shrink: 0;
+      min-width: 28px;
+    }
+
+    .audit-date {
+      color: #37474F;
+      flex-shrink: 0;
+      min-width: 72px;
+    }
+
+    .audit-by {
+      color: #78909C;
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .audit-time {
+      color: #90A4AE;
+      font-size: 0.72rem;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .audit-detail {
+      background: #F8FAFC;
+      border-bottom: 1px solid #E0E7EF;
+      padding: 6px 10px 8px 10px;
+      font-size: 0.78rem;
+    }
+
+    .audit-field {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0;
+    }
+
+    .af-label {
+      color: #78909C;
+      min-width: 72px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .af-old { color: #C62828; text-decoration: line-through; }
+    .af-new { color: #2E7D32; }
+    .af-arrow { color: #90A4AE; }
+    .audit-detail-meta {
+      font-size: 0.72rem;
+      color: #90A4AE;
+      margin-bottom: 4px;
+    }
+
     .user-email {
       flex: 1;
       font-size: 0.85rem;
@@ -1642,6 +1758,7 @@
         <button class="tab-btn" data-tab="users">Users</button>
         <button class="tab-btn" data-tab="staff">Staff</button>
         <button class="tab-btn" data-tab="data">Data</button>
+        <button class="tab-btn" data-tab="log">Log</button>
         <button class="tab-btn" data-tab="account">Account</button>
       </div>
 
@@ -1704,6 +1821,14 @@
               <button class="view-as-btn" data-role="viewer">Viewer</button>
             </div>
           </div>
+        </div>
+
+        <div class="tab-panel" id="tab-log">
+          <div class="audit-sort-row">
+            <button class="audit-sort-btn active" data-sort="changed_at">By change time</button>
+            <button class="audit-sort-btn" data-sort="calendar_date">By calendar date</button>
+          </div>
+          <div class="audit-log-list" id="auditLogList"></div>
         </div>
       </div>
 
@@ -2022,6 +2147,115 @@
         });
       });
     }
+
+    // ─────────────────────────────────────────────
+    //  Audit log
+    // ─────────────────────────────────────────────
+    let auditRows = [];
+    let auditSortBy = 'changed_at';
+
+    async function fetchAuditLog() {
+      const { data, error } = await sb
+        .from('audit_log')
+        .select('*')
+        .order('changed_at', { ascending: false })
+        .limit(200);
+      if (error) { console.error('audit_log fetch:', error.message); return; }
+      auditRows = data ?? [];
+      renderAuditLog();
+    }
+
+    function auditDateLabel(iso) {
+      if (!iso) return '—';
+      const [y, m, d] = iso.split('-').map(Number);
+      return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${d}, ${y}`;
+    }
+
+    function renderAuditDetail(row) {
+      const FIELDS = ['am', 'pm', 'oncall_am', 'oncall_pm', 'exception'];
+      const LABELS = { am: 'AM', pm: 'PM', oncall_am: 'Oncall AM', oncall_pm: 'Oncall PM', exception: 'Exception' };
+      const changedAt = new Date(row.changed_at).toLocaleString();
+      const byEmail = row.changed_by
+        ? (profileRows.find(p => p.id === row.changed_by)?.email ?? row.changed_by.slice(0, 8) + '…')
+        : 'System';
+      let html = `<div class="audit-detail-meta">${changedAt} · ${esc(byEmail)}</div>`;
+      if (row.operation === 'INSERT') {
+        html += FIELDS.map(f =>
+          `<div class="audit-field"><span class="af-label">${LABELS[f]}</span><span class="af-new">${esc(String(row.new_row?.[f] ?? '—'))}</span></div>`
+        ).join('');
+      } else if (row.operation === 'DELETE') {
+        html += FIELDS.map(f =>
+          `<div class="audit-field"><span class="af-label">${LABELS[f]}</span><span class="af-old">${esc(String(row.old_row?.[f] ?? '—'))}</span></div>`
+        ).join('');
+      } else {
+        const changed = FIELDS.filter(f => String(row.old_row?.[f]) !== String(row.new_row?.[f]));
+        if (!changed.length) {
+          html += '<span style="color:#90A4AE;font-size:0.78rem">No field changes recorded</span>';
+        } else {
+          html += changed.map(f =>
+            `<div class="audit-field"><span class="af-label">${LABELS[f]}</span><span class="af-old">${esc(String(row.old_row?.[f] ?? '—'))}</span><span class="af-arrow">→</span><span class="af-new">${esc(String(row.new_row?.[f] ?? '—'))}</span></div>`
+          ).join('');
+        }
+      }
+      return html;
+    }
+
+    function renderAuditLog() {
+      const container = document.getElementById('auditLogList');
+      if (!container) return;
+
+      document.querySelectorAll('.audit-sort-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.sort === auditSortBy);
+      });
+
+      const sorted = [...auditRows].sort((a, b) => {
+        if (auditSortBy === 'calendar_date') {
+          const ad = (a.new_row ?? a.old_row)?.date ?? '';
+          const bd = (b.new_row ?? b.old_row)?.date ?? '';
+          return bd.localeCompare(ad);
+        }
+        return new Date(b.changed_at) - new Date(a.changed_at);
+      });
+
+      if (!sorted.length) {
+        container.innerHTML = '<div style="padding:16px;color:#90A4AE;font-size:0.82rem;text-align:center">No changes recorded yet</div>';
+        return;
+      }
+
+      container.innerHTML = sorted.map((row, i) => {
+        const affRow = row.new_row ?? row.old_row;
+        const date = auditDateLabel(affRow?.date);
+        const person = affRow?.person_id ? (staffById[affRow.person_id]?.short_name ?? '?') : '—';
+        const opClass = row.operation === 'INSERT' ? 'op-insert' : row.operation === 'DELETE' ? 'op-delete' : 'op-update';
+        const opLabel = row.operation === 'INSERT' ? 'Add' : row.operation === 'DELETE' ? 'Del' : 'Edit';
+        const timeStr = new Date(row.changed_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const byEmail = row.changed_by
+          ? (profileRows.find(p => p.id === row.changed_by)?.email ?? '…')
+          : 'System';
+        return `<div class="audit-row" data-idx="${i}">
+            <span class="audit-op ${opClass}">${opLabel}</span>
+            <span class="audit-person">${esc(person)}</span>
+            <span class="audit-date">${esc(date)}</span>
+            <span class="audit-by">${esc(byEmail)}</span>
+            <span class="audit-time">${esc(timeStr)}</span>
+          </div>
+          <div class="audit-detail" id="audit-detail-${i}" style="display:none">${renderAuditDetail(row)}</div>`;
+      }).join('');
+
+      container.querySelectorAll('.audit-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const detail = document.getElementById(`audit-detail-${row.dataset.idx}`);
+          const opening = detail.style.display === 'none';
+          container.querySelectorAll('.audit-detail').forEach(d => d.style.display = 'none');
+          container.querySelectorAll('.audit-row').forEach(r => r.classList.remove('expanded'));
+          if (opening) { detail.style.display = 'block'; row.classList.add('expanded'); }
+        });
+      });
+    }
+
+    document.querySelectorAll('.audit-sort-btn').forEach(btn => {
+      btn.addEventListener('click', () => { auditSortBy = btn.dataset.sort; renderAuditLog(); });
+    });
 
     document.getElementById('addUserBtn').addEventListener('click', async () => {
       const email = document.getElementById('newUserEmail').value.trim().toLowerCase();
@@ -3061,6 +3295,7 @@
       document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
         const t = btn.dataset.tab;
         const visible = t === 'users' ? admin
+          : t === 'log' ? admin
           : t === 'data' ? (admin || scheduler)
           : true; // staff + account visible to all
         btn.style.display = visible ? '' : 'none';
@@ -3086,6 +3321,7 @@
       renderStaffList();
       if (admin) {
         fetchProfiles().then(renderUsersList);
+        fetchAuditLog();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
