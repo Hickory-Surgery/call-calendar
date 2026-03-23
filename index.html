@@ -3082,7 +3082,7 @@
             const prev = btn.innerHTML;
             btn.innerHTML = '✓';
             btn.classList.add('sub-btn-copied');
-            showToast('Link copied — paste into Apple Calendar, Google Calendar, or any calendar app that supports webcal subscriptions.');
+            showToast('Link copied — paste into your calendar app to subscribe.');
             setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
           });
         });
