@@ -2140,11 +2140,20 @@
         const cell = getCell(y, m, d, person);
         if (cell.oncall_am === 'none' && cell.oncall_pm === 'none') { e.preventDefault(); return; }
 
-        // Dragging from the PM/Sun slot moves only that half; anything else moves the whole pill
-        const pmDrag = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.pm-val'));
-        if (pmDrag && cell.oncall_pm === 'none') { e.preventDefault(); return; }
+        const isWeekend = new Date(y, m, d).getDay() === 6;
+        let half;
+        if (isWeekend) {
+          // Weekend: dragging from Sun (pm-val) moves only Sunday; dragging from Sat moves only Saturday
+          const pmDrag = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.pm-val'));
+          if (pmDrag && cell.oncall_pm === 'none') { e.preventDefault(); return; }
+          if (!pmDrag && cell.oncall_am === 'none') { e.preventDefault(); return; }
+          half = pmDrag ? 'pm' : 'am';
+        } else {
+          // Weekday: dragging from either end moves the whole pill
+          half = 'both';
+        }
 
-        dragSrc = { y, m, d, person, half: pmDrag ? 'pm' : 'both' };
+        dragSrc = { y, m, d, person, half };
         e.dataTransfer.effectAllowed = 'move';
         row.classList.add('drag-source');
       });
@@ -2175,7 +2184,10 @@
         e.preventDefault();
         const src = getCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person);
         const tgt = getCell(ty, tm, td, tPerson);
-        if (dragSrc.half === 'pm') {
+        if (dragSrc.half === 'am') {
+          setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, oncall_am: 'none' });
+          setCell(ty, tm, td, tPerson, { ...tgt, oncall_am: src.oncall_am });
+        } else if (dragSrc.half === 'pm') {
           setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, oncall_pm: 'none' });
           setCell(ty, tm, td, tPerson, { ...tgt, oncall_pm: src.oncall_pm });
         } else {
