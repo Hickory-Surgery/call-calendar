@@ -1105,6 +1105,60 @@
       background: #FFEBEE;
     }
 
+    /* Role preview banner */
+    #rolePreviewBanner {
+      background: #E65100;
+      color: white;
+      font-size: 0.78rem;
+      font-weight: 500;
+      padding: 5px 12px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+    }
+    #rolePreviewBanner strong {
+      font-weight: 700;
+    }
+    #rolePreviewExit {
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.4);
+      border-radius: 4px;
+      color: white;
+      font-size: 0.72rem;
+      padding: 2px 8px;
+      cursor: pointer;
+    }
+    #rolePreviewExit:hover {
+      background: rgba(255,255,255,0.35);
+    }
+
+    /* View-as toggle buttons in Account tab */
+    .view-as-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .view-as-btn {
+      flex: 1;
+      padding: 8px 0;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 6px;
+      background: white;
+      color: #546E7A;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    .view-as-btn:hover {
+      background: #ECEFF1;
+    }
+    .view-as-btn.active {
+      border-color: #1565C0;
+      background: #E3F2FD;
+      color: #1565C0;
+    }
+
     .month-heading {
       background: #546E7A;
       color: white;
@@ -1416,6 +1470,12 @@
 
   <div class="app">
 
+    <!-- Role preview banner (admin-only, shown when previewing as another role) -->
+    <div id="rolePreviewBanner">
+      Previewing as <strong id="rolePreviewLabel"></strong>
+      <button id="rolePreviewExit">✕ Exit preview</button>
+    </div>
+
     <!-- Top bar -->
     <div class="topbar">
       <div class="month-nav">
@@ -1557,6 +1617,15 @@
         <div class="tab-panel" id="tab-account">
           <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
           <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+
+          <div id="viewAsSection" style="display:none; margin-top:16px; border-top:1px solid #ECEFF1; padding-top:14px;">
+            <div style="font-size:0.78rem; font-weight:600; color:#546E7A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Preview as role</div>
+            <div class="view-as-row">
+              <button class="view-as-btn" data-role="admin">Admin</button>
+              <button class="view-as-btn" data-role="scheduler">Scheduler</button>
+              <button class="view-as-btn" data-role="viewer">Viewer</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1586,10 +1655,12 @@
     // ─────────────────────────────────────────────
     let currentUser = null;
     let currentRole = 'viewer';
+    let viewAsRole = null; // null = use real role; set by admin to preview another role
     let realtimeChannel = null;
     let sessionApplied = false;
-    const canEdit = () => currentRole === 'scheduler' || currentRole === 'admin';
-    const isAdmin = () => currentRole === 'admin';
+    const effectiveRole = () => viewAsRole ?? currentRole;
+    const canEdit = () => effectiveRole() === 'scheduler' || effectiveRole() === 'admin';
+    const isAdmin = () => effectiveRole() === 'admin';
 
     const loginScreen = document.getElementById('loginScreen');
 
@@ -2809,7 +2880,7 @@
 
     function openSettings() {
       const admin = isAdmin();
-      const scheduler = currentRole === 'scheduler';
+      const scheduler = effectiveRole() === 'scheduler';
 
       // Show/hide tabs by role
       document.querySelectorAll('#settingsTabs .tab-btn').forEach(btn => {
@@ -2823,6 +2894,13 @@
       // Show/hide admin-only data buttons
       document.querySelectorAll('#settingsOverlay .admin-only').forEach(el => {
         el.style.display = admin ? '' : 'none';
+      });
+
+      // View-as section: only real admins see this
+      const viewAsSection = document.getElementById('viewAsSection');
+      viewAsSection.style.display = currentRole === 'admin' ? '' : 'none';
+      document.querySelectorAll('.view-as-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.role === (viewAsRole ?? currentRole));
       });
 
       // Activate first visible tab
@@ -2853,6 +2931,32 @@
       await sb.auth.signOut();
     });
 
+    function syncRolePreviewBanner() {
+      const banner = document.getElementById('rolePreviewBanner');
+      if (viewAsRole && currentRole === 'admin') {
+        document.getElementById('rolePreviewLabel').textContent =
+          viewAsRole.charAt(0).toUpperCase() + viewAsRole.slice(1);
+        banner.style.display = 'flex';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    document.querySelectorAll('.view-as-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const role = btn.dataset.role;
+        viewAsRole = role === 'admin' ? null : role;
+        closeSettings();
+        syncRolePreviewBanner();
+      });
+    });
+
+    document.getElementById('rolePreviewExit').addEventListener('click', () => {
+      viewAsRole = null;
+      syncRolePreviewBanner();
+      render();
+    });
+
     document.getElementById('saveRatesBtn').addEventListener('click', async () => {
       const frye_weekday = parseFloat(document.getElementById('rateFryeWd').value) || 0;
       const frye_weekend = parseFloat(document.getElementById('rateFryeWe').value) || 0;
@@ -2867,14 +2971,14 @@
     });
 
     function closeSettings() {
-      if (isAdmin()) {
+      if (currentRole === 'admin') {
         syncStaffFromDOM();
         staff = staff.filter(Boolean);
         if (!staff.length) staff = ['Person 1'];
       }
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
-      if (isAdmin()) saveStaffToSupabase();
+      if (currentRole === 'admin') saveStaffToSupabase();
     }
 
     const ICAL_BASE = 'https://pkjlnjsswoadftkseffo.supabase.co/functions/v1/ical';
