@@ -2579,11 +2579,15 @@
           <button class="cg-btn cg-disabled"></button>`;
         oncallHtml += '</div>';
       } else {
-        // Weekday: single column (sets both AM and PM together)
-        assignHtml = `<div class="cg-grid cg-single">`;
+        // Weekday assignments: AM col sets both (linked), PM col sets independently
+        assignHtml = `<div class="cg-grid">
+          <div></div>
+          <div class="cg-col-hdr">AM</div>
+          <div class="cg-col-hdr">PM</div>`;
         for (const val of ASSIGNMENTS) {
           assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
-            <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
+            <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>
+            <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
         }
         assignHtml += '</div>';
 
