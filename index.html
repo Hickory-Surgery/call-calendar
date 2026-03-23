@@ -1730,9 +1730,16 @@
       if (!role) {
         // Notify admins of the new user (fires once; edge function is idempotent)
         try {
-          await sb.functions.invoke('notify-new-user', {
-            headers: { Authorization: `Bearer ${session.access_token}` },
+          const fnUrl = `${SUPABASE_URL}/functions/v1/notify-new-user`;
+          console.log('Calling notify-new-user:', fnUrl);
+          const res = await fetch(fnUrl, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session.access_token}`,
+              'Content-Type': 'application/json',
+            },
           });
+          console.log('notify-new-user response:', res.status, await res.text());
         } catch (e) {
           console.error('notify-new-user failed:', e);
         }
