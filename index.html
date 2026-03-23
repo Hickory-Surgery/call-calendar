@@ -1581,6 +1581,9 @@
 
       <div class="tab-panels">
         <div class="tab-panel" id="tab-staff">
+          <div style="font-size:0.78rem; color:#607D8B; margin-bottom:10px;">
+            Tap &#128197; next to a name to copy that person's calendar subscription link, then paste it into Apple Calendar, Google Calendar, or any calendar app that supports webcal subscriptions.
+          </div>
           <div class="staff-list" id="staffList"></div>
           <button class="add-btn" id="addStaffBtn">+ Add person</button>
         </div>
@@ -3079,6 +3082,7 @@
             const prev = btn.innerHTML;
             btn.innerHTML = '✓';
             btn.classList.add('sub-btn-copied');
+            showToast('Link copied — paste into Apple Calendar, Google Calendar, or any calendar app that supports webcal subscriptions.');
             setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
           });
         });
