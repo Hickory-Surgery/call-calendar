@@ -2904,19 +2904,15 @@
 
       // View-as section: only real admins see this
       const viewAsSection = document.getElementById('viewAsSection');
-      viewAsSection.style.display = currentRole === 'admin' ? 'block' : 'none';
+      // Only show preview controls when admin and not already previewing (use banner to exit)
+      viewAsSection.style.display = (currentRole === 'admin' && !viewAsRole) ? 'block' : 'none';
       document.querySelectorAll('.view-as-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.role === (viewAsRole ?? currentRole));
       });
 
-      // When previewing, jump to Account tab so admin can see/change the role
-      if (viewAsRole) {
-        switchTab('account');
-      } else {
-        const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
-          .find(b => b.style.display !== 'none');
-        if (firstVisible) switchTab(firstVisible.dataset.tab);
-      }
+      const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
+        .find(b => b.style.display !== 'none');
+      if (firstVisible) switchTab(firstVisible.dataset.tab);
 
       renderStaffList();
       if (admin) {
@@ -2984,14 +2980,14 @@
     });
 
     function closeSettings() {
-      if (currentRole === 'admin') {
+      if (currentRole === 'admin' && !viewAsRole) {
         syncStaffFromDOM();
         staff = staff.filter(Boolean);
         if (!staff.length) staff = ['Person 1'];
       }
       document.getElementById('settingsOverlay').classList.remove('open');
       render();
-      if (currentRole === 'admin') saveStaffToSupabase();
+      if (currentRole === 'admin' && !viewAsRole) saveStaffToSupabase();
     }
 
     const ICAL_BASE = 'https://pkjlnjsswoadftkseffo.supabase.co/functions/v1/ical';
