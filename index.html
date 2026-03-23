@@ -2904,7 +2904,7 @@
 
       // View-as section: only real admins see this
       const viewAsSection = document.getElementById('viewAsSection');
-      viewAsSection.style.display = currentRole === 'admin' ? '' : 'none';
+      viewAsSection.style.display = currentRole === 'admin' ? 'block' : 'none';
       document.querySelectorAll('.view-as-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.role === (viewAsRole ?? currentRole));
       });
@@ -3088,7 +3088,9 @@
       const items = document.querySelectorAll('#staffList .staff-item');
       staff = [];
       items.forEach(item => {
-        const short = item.querySelector('.staff-short').value.trim();
+        const shortEl = item.querySelector('.staff-short');
+        if (!shortEl) return; // read-only item (viewer/scheduler preview)
+        const short = shortEl.value.trim();
         const full = item.querySelector('.staff-full').value.trim();
         staff.push(short);
         if (short) {
