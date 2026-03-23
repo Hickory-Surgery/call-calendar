@@ -1,14 +1,16 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import nodemailer from 'npm:nodemailer'
+import { SmtpClient } from 'https://deno.land/x/denomailer@1.3.0/mod.ts'
 
 Deno.serve(async (req) => {
+  console.log('notify-new-user invoked', req.method)
+
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405 })
   }
 
-  // Verify caller is a real authenticated user
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
+    console.log('Missing auth header')
     return new Response('Unauthorized', { status: 401 })
   }
 
@@ -21,8 +23,10 @@ Deno.serve(async (req) => {
     authHeader.slice(7),
   )
   if (authError || !user?.email) {
+    console.log('Auth error:', authError?.message)
     return new Response('Unauthorized', { status: 401 })
   }
+  console.log('User:', user.email)
 
   // Idempotency: only notify once per user
   const { data: existing } = await sb
@@ -32,17 +36,19 @@ Deno.serve(async (req) => {
     .maybeSingle()
 
   if (existing?.notified_at) {
+    console.log('Already notified')
     return new Response('Already notified', { status: 200 })
   }
 
-  // Record the pending user
   await sb.from('pending_users').upsert({ id: user.id, email: user.email })
 
-  // Collect admin emails via admin API
+  // Collect admin emails
   const { data: adminProfiles } = await sb
     .from('profiles')
     .select('id')
     .eq('role', 'admin')
+
+  console.log('Admin profiles found:', adminProfiles?.length ?? 0)
 
   if (!adminProfiles?.length) {
     return new Response('No admins found', { status: 200 })
@@ -54,40 +60,34 @@ Deno.serve(async (req) => {
     if (adminUser?.email) adminEmails.push(adminUser.email)
   }
 
+  console.log('Admin emails:', adminEmails)
+
   if (!adminEmails.length) {
     return new Response('No admin emails found', { status: 200 })
   }
 
   // Send via Gmail SMTP
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
-    auth: {
-      user: Deno.env.get('SMTP_USER'),
-      pass: Deno.env.get('SMTP_PASS'),
-    },
+  const client = new SmtpClient()
+  await client.connectTLS({
+    hostname: 'smtp.gmail.com',
+    port: 465,
+    username: Deno.env.get('SMTP_USER')!,
+    password: Deno.env.get('SMTP_PASS')!,
   })
 
-  await transporter.sendMail({
-    from: `"Call Calendar" <${Deno.env.get('SMTP_USER')}>`,
-    to: adminEmails.join(', '),
-    subject: 'New user requesting access — Call Calendar',
-    text: [
-      `A new user signed in and is waiting for access:`,
-      ``,
-      `  ${user.email}`,
-      ``,
-      `Log in and go to Settings → Users to approve them.`,
-    ].join('\n'),
-    html: `
-      <p>A new user signed in and is waiting for access:</p>
-      <p style="font-size:1.1em;font-weight:bold">${user.email}</p>
-      <p>Log in and go to <strong>Settings → Users</strong> to approve them.</p>
-    `,
-  })
+  for (const to of adminEmails) {
+    await client.send({
+      from: Deno.env.get('SMTP_USER')!,
+      to,
+      subject: 'New user requesting access — Call Calendar',
+      content: `A new user signed in and is waiting for access:\n\n  ${user.email}\n\nLog in and go to Settings → Users to approve them.`,
+      html: `<p>A new user signed in and is waiting for access:</p><p style="font-size:1.1em;font-weight:bold">${user.email}</p><p>Log in and go to <strong>Settings → Users</strong> to approve them.</p>`,
+    })
+  }
 
-  // Mark notified
+  await client.close()
+  console.log('Email sent to:', adminEmails.join(', '))
+
   await sb
     .from('pending_users')
     .update({ notified_at: new Date().toISOString() })
