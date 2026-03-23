@@ -1810,15 +1810,26 @@
         </div>
 
         <div class="tab-panel" id="tab-account">
-          <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
-          <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
+          <!-- Public (not signed in) -->
+          <div id="accountPublic">
+            <p style="font-size:0.82rem;color:#607D8B;margin-bottom:12px">Sign in for edit access and personalised settings.</p>
+            <button class="btn-google" id="btnGoogleSignInSettings">
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="">
+              Sign in with Google
+            </button>
+          </div>
+          <!-- Signed in -->
+          <div id="accountSignedIn">
+            <div style="font-size:0.8rem; color:#607D8B; margin-bottom:6px;" id="signedInAs"></div>
+            <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
 
-          <div id="viewAsSection" style="margin-top:16px; border-top:1px solid #ECEFF1; padding-top:14px;">
-            <div style="font-size:0.78rem; font-weight:600; color:#546E7A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Preview as role</div>
-            <div class="view-as-row">
-              <button class="view-as-btn" data-role="admin">Admin</button>
-              <button class="view-as-btn" data-role="scheduler">Scheduler</button>
-              <button class="view-as-btn" data-role="viewer">Viewer</button>
+            <div id="viewAsSection" style="margin-top:16px; border-top:1px solid #ECEFF1; padding-top:14px;">
+              <div style="font-size:0.78rem; font-weight:600; color:#546E7A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Preview as role</div>
+              <div class="view-as-row">
+                <button class="view-as-btn" data-role="admin">Admin</button>
+                <button class="view-as-btn" data-role="scheduler">Scheduler</button>
+                <button class="view-as-btn" data-role="viewer">Viewer</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1879,6 +1890,27 @@
       return data ? data.role : null;
     }
 
+    async function loadPublic() {
+      currentUser = null;
+      currentRole = 'viewer';
+      sessionApplied = false;
+      if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
+      await fetchStaff();
+      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      setupRealtimeSubscriptions();
+      render();
+      updateDaySummary();
+      loginScreen.classList.add('hidden');
+      const savedPos = (() => {
+        try {
+          const p = JSON.parse(localStorage.getItem('viewPos'));
+          if (p && Date.now() - p.at < 8 * 60 * 60 * 1000) return p;
+        } catch {}
+        return null;
+      })();
+      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
+    }
+
     async function applySession(session) {
       if (sessionApplied) return;
       sessionApplied = true;
@@ -1886,9 +1918,7 @@
       if (!role) {
         // Notify admins of the new user (fires once; edge function is idempotent)
         try {
-          const fnUrl = `${SUPABASE_URL}/functions/v1/notify-new-user`;
-          console.log('Calling notify-new-user:', fnUrl);
-          const res = await fetch(fnUrl, {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-new-user`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${session.access_token}`,
@@ -1901,9 +1931,8 @@
         }
         sessionApplied = false;
         await sb.auth.signOut();
-        loginScreen.classList.remove('checking');
-        loginScreen.querySelector('.login-sub').textContent = 'Access not authorised. Contact an admin.';
-        return;
+        showToast('Access not authorised — contact an admin.');
+        return; // onAuthStateChange SIGNED_OUT will call loadPublic()
       }
       currentUser = session.user;
       currentRole = role;
@@ -1928,21 +1957,16 @@
       if (session?.user) {
         applySession(session);
       } else {
-        loginScreen.classList.remove('checking');
+        loadPublic();
       }
     });
 
     // Handle sign-in and sign-out during the session
-    sb.auth.onAuthStateChange((_event, session) => {
+    sb.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         applySession(session);
-      } else if (currentUser) {
-        // Only revert to login if we were previously signed in (genuine sign-out)
-        currentUser = null;
-        currentRole = 'viewer';
-        sessionApplied = false;
-        if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-        loginScreen.classList.remove('hidden');
+      } else if (event === 'SIGNED_OUT') {
+        loadPublic();
       }
     });
 
@@ -3303,7 +3327,8 @@
         const visible = t === 'users' ? admin
           : t === 'log' ? admin
           : t === 'data' ? (admin || scheduler)
-          : true; // staff + account visible to all
+          : t === 'staff' ? !!currentUser
+          : true; // account always visible
         btn.style.display = visible ? '' : 'none';
       });
 
@@ -3335,6 +3360,8 @@
           document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
         });
       }
+      document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
+      document.getElementById('accountSignedIn').style.display = currentUser ? 'block' : 'none';
       document.getElementById('signedInAs').textContent =
         currentUser ? `Signed in as ${currentUser.email}` : '';
       document.getElementById('settingsOverlay').classList.add('open');
@@ -3344,8 +3371,16 @@
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    document.getElementById('btnGoogleSignInSettings').addEventListener('click', () => {
+      sb.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.origin + window.location.pathname }
+      });
+    });
+
     document.getElementById('signOutBtn').addEventListener('click', async () => {
       await sb.auth.signOut();
+      document.getElementById('settingsOverlay').classList.remove('open');
     });
 
     function syncRolePreviewBanner() {
