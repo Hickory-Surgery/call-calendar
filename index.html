@@ -430,6 +430,13 @@
       padding: 1px 3px;
     }
 
+    /* Exception green takes priority over oncall color on the AM half */
+    .am-val.oncall-single.exception,
+    .am-val.oncall-double.exception {
+      background: var(--oncall-exception);
+      border: 1px solid #388E3C;
+    }
+
     .am-val.oncall-single,
     .am-val.oncall-double,
     .am-val.exception {
