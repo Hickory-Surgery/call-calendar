@@ -1729,9 +1729,13 @@
       const role = await fetchRole(session.user.id);
       if (!role) {
         // Notify admins of the new user (fires once; edge function is idempotent)
-        sb.functions.invoke('notify-new-user', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }).catch(() => {}); // best-effort — don't block the UI
+        try {
+          await sb.functions.invoke('notify-new-user', {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+        } catch (e) {
+          console.error('notify-new-user failed:', e);
+        }
         await sb.auth.signOut();
         loginScreen.classList.remove('checking');
         loginScreen.querySelector('.login-sub').textContent = 'Access not authorised. Contact an admin.';
