@@ -2826,7 +2826,7 @@
       const bariOptions = `<option value=""></option>` +
         bariStaff.map(p => `<option value="${esc(p)}"${selectedBari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
       const bariSelect = inMonth && bariStaff.length
-        ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call">${bariOptions}</select>`
+        ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call"${canEdit() ? '' : ' disabled'}>${bariOptions}</select>`
         : '';
 
       let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
