@@ -1,17 +1,27 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { SmtpClient } from 'https://deno.land/x/denomailer@1.3.0/mod.ts'
 
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS })
+  }
+
   console.log('notify-new-user invoked', req.method)
 
   if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 })
+    return new Response('Method not allowed', { status: 405, headers: CORS })
   }
 
   const authHeader = req.headers.get('Authorization') ?? ''
   if (!authHeader.startsWith('Bearer ')) {
     console.log('Missing auth header')
-    return new Response('Unauthorized', { status: 401 })
+    return new Response('Unauthorized', { status: 401, headers: CORS })
   }
 
   const sb = createClient(
@@ -37,7 +47,7 @@ Deno.serve(async (req) => {
 
   if (existing?.notified_at) {
     console.log('Already notified')
-    return new Response('Already notified', { status: 200 })
+    return new Response('Already notified', { status: 200, headers: CORS })
   }
 
   await sb.from('pending_users').upsert({ id: user.id, email: user.email })
@@ -51,7 +61,7 @@ Deno.serve(async (req) => {
   console.log('Admin profiles found:', adminProfiles?.length ?? 0)
 
   if (!adminProfiles?.length) {
-    return new Response('No admins found', { status: 200 })
+    return new Response('No admins found', { status: 200, headers: CORS })
   }
 
   const adminEmails: string[] = []
@@ -63,7 +73,7 @@ Deno.serve(async (req) => {
   console.log('Admin emails:', adminEmails)
 
   if (!adminEmails.length) {
-    return new Response('No admin emails found', { status: 200 })
+    return new Response('No admin emails found', { status: 200, headers: CORS })
   }
 
   // Send via Gmail SMTP
@@ -93,5 +103,5 @@ Deno.serve(async (req) => {
     .update({ notified_at: new Date().toISOString() })
     .eq('id', user.id)
 
-  return new Response('OK', { status: 200 })
+  return new Response('OK', { status: 200, headers: CORS })
 })
