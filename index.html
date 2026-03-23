@@ -3610,6 +3610,50 @@
       });
     })();
 
+    // ─────────────────────────────────────────────
+    //  Scheduled date/summary transitions
+    //  - Midnight local: move the "today" cell highlight
+    //  - 7:00 AM ET:     update the call summary (duty handoff time)
+    // ─────────────────────────────────────────────
+    (function scheduleTransitions() {
+      // Ms until next local midnight
+      function msUntilMidnight() {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) - now;
+      }
+
+      // Ms until next 7:00:00 AM America/New_York
+      function msUntil7amET() {
+        const now = new Date();
+        const fmt = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'America/New_York',
+          hour: 'numeric', minute: 'numeric', second: 'numeric', hour12: false,
+        });
+        const p = Object.fromEntries(fmt.formatToParts(now).filter(x => x.type !== 'literal').map(x => [x.type, +x.value]));
+        const secondsSince7am = (p.hour - 7) * 3600 + p.minute * 60 + p.second;
+        return (secondsSince7am < 0 ? -secondsSince7am : 86400 - secondsSince7am) * 1000;
+      }
+
+      function scheduleMidnight() {
+        setTimeout(() => {
+          today = new Date();
+          document.getElementById('todayNum').textContent = today.getDate();
+          render();
+          scheduleMidnight();
+        }, msUntilMidnight());
+      }
+
+      function schedule7am() {
+        setTimeout(() => {
+          updateDaySummary();
+          schedule7am();
+        }, msUntil7amET());
+      }
+
+      scheduleMidnight();
+      schedule7am();
+    })();
+
   </script>
 </body>
 
