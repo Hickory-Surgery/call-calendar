@@ -1105,8 +1105,12 @@
       background: #FFEBEE;
     }
 
-    /* Role preview banner */
+    /* Role preview banner — sticky so it stays visible while scrolling */
     #rolePreviewBanner {
+      position: sticky;
+      top: 0;
+      z-index: 21; /* above topbar (z-index: 20) */
+      flex-shrink: 0;
       background: #E65100;
       color: white;
       font-size: 0.78rem;
@@ -2290,7 +2294,9 @@
     }
 
     function stickyOffset() {
-      return document.querySelector('.topbar').offsetHeight +
+      const banner = document.getElementById('rolePreviewBanner');
+      const bannerH = viewAsRole ? (banner ? banner.offsetHeight : 0) : 0;
+      return bannerH + document.querySelector('.topbar').offsetHeight +
         document.querySelector('.day-headers').offsetHeight;
     }
 
@@ -2903,10 +2909,14 @@
         btn.classList.toggle('active', btn.dataset.role === (viewAsRole ?? currentRole));
       });
 
-      // Activate first visible tab
-      const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
-        .find(b => b.style.display !== 'none');
-      if (firstVisible) switchTab(firstVisible.dataset.tab);
+      // When previewing, jump to Account tab so admin can see/change the role
+      if (viewAsRole) {
+        switchTab('account');
+      } else {
+        const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
+          .find(b => b.style.display !== 'none');
+        if (firstVisible) switchTab(firstVisible.dataset.tab);
+      }
 
       renderStaffList();
       if (admin) {
@@ -2933,12 +2943,15 @@
 
     function syncRolePreviewBanner() {
       const banner = document.getElementById('rolePreviewBanner');
+      const topbar = document.querySelector('.topbar');
       if (viewAsRole && currentRole === 'admin') {
         document.getElementById('rolePreviewLabel').textContent =
           viewAsRole.charAt(0).toUpperCase() + viewAsRole.slice(1);
         banner.style.display = 'flex';
+        requestAnimationFrame(() => { topbar.style.top = banner.offsetHeight + 'px'; });
       } else {
         banner.style.display = 'none';
+        topbar.style.top = '';
       }
     }
 
