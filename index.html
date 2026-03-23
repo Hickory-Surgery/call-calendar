@@ -2513,6 +2513,7 @@
       grid.className = 'cal-grid';
       grid.innerHTML = buildMonthHTML(y, m);
       grid.onclick = e => {
+        if (!canEdit()) return;
         if (e.target.closest('.backup-select')) return;
         const row = e.target.closest('[data-person]');
         if (!row) return;
@@ -2597,6 +2598,7 @@
       grid.addEventListener('mousedown', e => { dragInitiatedFrom = e.target; });
 
       grid.addEventListener('dragstart', e => {
+        if (!canEdit()) { e.preventDefault(); return; }
         const row = e.target.closest('[data-person]');
         if (!row) return;
         const y = +row.dataset.y, m = +row.dataset.m, d = +row.dataset.d, person = row.dataset.person;
@@ -2862,7 +2864,7 @@
       const amTxt = abbr(am), pmTxt = abbr(pm);
       const amCls = 'am-val' + (amTxt ? '' : ' empty') + (amIn && oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (amIn && exception ? ' exception' : '') + (amIn ? '' : ' slot-out');
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (pmIn && oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
-      const draggable = (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
+      const draggable = canEdit() && (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname">${nm}</span>
         <span class="slots">
