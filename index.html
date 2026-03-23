@@ -1415,6 +1415,37 @@
       gap: 8px;
     }
 
+    .user-pending {
+      background: #FFF8E1;
+      border-radius: 6px;
+      padding: 4px 6px;
+      margin-bottom: 4px;
+    }
+
+    .pending-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #E65100;
+      background: #FFE0B2;
+      border-radius: 4px;
+      padding: 1px 5px;
+      white-space: nowrap;
+    }
+
+    .approve-btn {
+      background: #43A047;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .approve-btn:hover { background: #388E3C; }
+
     .user-email {
       flex: 1;
       font-size: 0.85rem;
@@ -1902,15 +1933,34 @@
       }
     }
 
+    let pendingRows = [];
+
     async function fetchProfiles() {
-      const { data: rows, error } = await sb.from('profiles').select('*').order('email');
+      const [{ data: rows, error }, { data: pending }] = await Promise.all([
+        sb.from('profiles').select('*').order('email'),
+        sb.from('pending_users').select('*').order('requested_at'),
+      ]);
       if (!error) profileRows = rows;
+      pendingRows = pending ?? [];
     }
 
     function renderUsersList() {
       const adminCount = profileRows.filter(p => p.role === 'admin').length;
       const list = document.getElementById('usersList');
-      list.innerHTML = profileRows.map(p => {
+
+      const pendingHtml = pendingRows.map(p => `
+        <div class="user-item user-pending" data-pending-id="${esc(p.id)}">
+          <span class="user-email">${esc(p.email)}</span>
+          <span class="pending-badge">Pending</span>
+          <select class="approve-role-select">
+            <option value="viewer">Viewer</option>
+            <option value="scheduler">Scheduler</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="approve-btn" data-id="${esc(p.id)}" data-email="${esc(p.email)}">Approve</button>
+        </div>`).join('');
+
+      const profilesHtml = profileRows.map(p => {
         const isLastAdmin = p.role === 'admin' && adminCount === 1;
         return `
         <div class="user-item" data-id="${p.id}">
@@ -1924,6 +1974,8 @@
             ${isLastAdmin ? 'disabled title="Cannot remove the only admin"' : ''}>&#x2715;</button>
         </div>`;
       }).join('');
+
+      list.innerHTML = pendingHtml + profilesHtml;
 
       list.querySelectorAll('.role-select').forEach(sel => {
         sel.addEventListener('change', async () => {
@@ -1954,6 +2006,19 @@
           if (error) { showToast('Remove failed — please try again.'); return; }
           profileRows = profileRows.filter(p => p.id !== btn.dataset.id);
           renderUsersList();
+        });
+      });
+
+      list.querySelectorAll('.approve-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const role = btn.closest('.user-pending').querySelector('.approve-role-select').value;
+          const { error } = await sb.rpc('create_profile', { user_email: btn.dataset.email, user_role: role });
+          if (error) { showToast('Approve failed — please try again.'); return; }
+          await sb.from('pending_users').delete().eq('id', btn.dataset.id);
+          pendingRows = pendingRows.filter(p => p.id !== btn.dataset.id);
+          await fetchProfiles();
+          renderUsersList();
+          showToast(`${btn.dataset.email} approved as ${role}.`);
         });
       });
     }
