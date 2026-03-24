@@ -895,6 +895,8 @@
 
     .cg-label.cg-disabled {
       color: #B0BEC5;
+      pointer-events: none;
+      cursor: default;
     }
 
     .cg-btn.cg-disabled {
@@ -3426,9 +3428,9 @@
           <div class="cg-col-hdr">Sat</div>
           <div class="cg-col-hdr">Sun</div>`;
         for (const val of ASSIGNMENTS) {
-          assignHtml += `<div class="cg-label" data-asgn="${esc(val)}" style="cursor:pointer">${labelHtml(val)}</div>
-            <button class="cg-btn asgn-am${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>
-            <button class="cg-btn asgn-pm${editState.pm === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
+          assignHtml += `<div class="cg-label cg-disabled" data-asgn="${esc(val)}">${labelHtml(val)}</div>
+            <button class="cg-btn asgn-am cg-disabled${editState.am === val ? ' active' : ''}" data-val="${esc(val)}"></button>
+            <button class="cg-btn asgn-pm cg-disabled${editState.pm === val ? ' active' : ''}" data-val="${esc(val)}"></button>`;
         }
         assignHtml += '</div>';
 
@@ -4035,35 +4037,18 @@
       if (e.key === 'ArrowUp') { e.preventDefault(); saveAndRetreatUp(); return; }
       if (e.key === 'Enter') { if (doSave() !== false) { const { y, m } = editing; closeEdit(); reRenderMonth(y, m); } return; }
       if (e.key === 'Escape') { closeEdit(); return; }
-      if (e.key === ' ') { e.preventDefault(); applySlotVal(''); renderChoiceGrid(); return; }
-
+      const editingDow = editing && new Date(editing.y, editing.m, editing.d).getDay();
+      const editingWeekend = editingDow === 0 || editingDow === 6;
       const key = e.key.toLowerCase();
-      if (KEY_SHORTCUTS[key]) {
-        applySlotVal(KEY_SHORTCUTS[key]);
-        renderChoiceGrid();
-        return;
+      if (!editingWeekend) {
+        if (e.key === ' ') { e.preventDefault(); applySlotVal(''); renderChoiceGrid(); return; }
+        if (KEY_SHORTCUTS[key]) { applySlotVal(KEY_SHORTCUTS[key]); renderChoiceGrid(); return; }
+        if (key === 'b') { applySlotVal(editState.am === 'ba-C' ? 'ba-F' : 'ba-C'); renderChoiceGrid(); return; }
       }
-      // 'b' cycles ba-C → ba-F → ba-C
-      if (key === 'b') {
-        applySlotVal(editState.am === 'ba-C' ? 'ba-F' : 'ba-C');
-        renderChoiceGrid(); return;
-      }
-      if (key === 'n') {
-        applySlotOncall('none');
-        renderChoiceGrid(); return;
-      }
-      if (key === 'e') {
-        editState.exception = !editState.exception;
-        renderChoiceGrid(); return;
-      }
-      if (key === 's') {
-        applySlotOncall('single');
-        renderChoiceGrid(); return;
-      }
-      if (key === 'd') {
-        applySlotOncall('double');
-        renderChoiceGrid(); return;
-      }
+      if (key === 'n') { applySlotOncall('none'); renderChoiceGrid(); return; }
+      if (key === 'e') { editState.exception = !editState.exception; renderChoiceGrid(); return; }
+      if (key === 's') { applySlotOncall('single'); renderChoiceGrid(); return; }
+      if (key === 'd') { applySlotOncall('double'); renderChoiceGrid(); return; }
     });
 
     // ─────────────────────────────────────────────
