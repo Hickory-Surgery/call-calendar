@@ -3189,7 +3189,7 @@
       }
       const callPerson = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
       const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
-      let backupPerson = exceptionPerson || staff.find(p => isHospDay(getCell(y, m, d, p))) ?? '';
+      let backupPerson = exceptionPerson || (staff.find(p => isHospDay(getCell(y, m, d, p))) ?? '');
       if (!backupPerson && (dow === 0 || dow === 6)) {
         backupPerson = staff.find(p => {
           const c = getCell(y, m, d - 1, p); // Friday hosp fallback
