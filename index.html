@@ -549,6 +549,12 @@
       background: var(--oncall-exception);
     }
 
+    /* Holiday CLOSED default — slightly muted to distinguish from explicitly set CLOSED */
+    .closed-row.holiday-closed {
+      background: #E4EAED;
+      opacity: 0.75;
+    }
+
     .pname-closed {
       font-size: 0.58rem;
       font-weight: 700;
@@ -2600,6 +2606,23 @@
       return [d.getFullYear(), d.getMonth(), d.getDate()];
     }
 
+    // Returns true for the 6 observed federal holidays that fall on a weekday.
+    // m is 0-indexed; weekends return false.
+    function isHoliday(y, m, d) {
+      const dow = new Date(y, m, d).getDay(); // 0=Sun, 6=Sat
+      if (dow === 0 || dow === 6) return false;
+      if (m === 0  && d === 1)  return true;  // New Year's Day
+      if (m === 6  && d === 4)  return true;  // Independence Day
+      if (m === 11 && d === 25) return true;  // Christmas Day
+      // Memorial Day: last Monday of May
+      if (m === 4 && dow === 1 && new Date(y, m, d + 7).getMonth() !== m) return true;
+      // Labor Day: first Monday of September
+      if (m === 8 && dow === 1 && d <= 7) return true;
+      // Thanksgiving: 4th Thursday of November
+      if (m === 10 && dow === 4 && d >= 22 && d <= 28) return true;
+      return false;
+    }
+
     function cellKey(y, m, d, person) { return `${y}-${m + 1}-${d}-${person}`; }
 
     function getCell(y, m, d, person) {
@@ -3070,6 +3093,11 @@
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
         return `<div class="closed-row${callCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+          <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
+        </div>`;
+      }
+      if (!am && !pm && isHoliday(y, m, d)) {
+        return `<div class="closed-row holiday-closed${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
