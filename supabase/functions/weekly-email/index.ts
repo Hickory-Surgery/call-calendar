@@ -256,8 +256,8 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Call Calendar <onboarding@resend.dev>',
-      to: [recipientEmails[0]], // resend.dev sandbox: update to recipientEmails once custom domain is set
+      from: 'Call Calendar <noreply@ssrounds.com>',
+      to: recipientEmails,
       subject: `Call Schedule — ${weekLabel}`,
       html,
       text,

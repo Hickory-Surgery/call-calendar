@@ -83,8 +83,8 @@ Deno.serve(async (req) => {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      from: 'Call Calendar <onboarding@resend.dev>',
-      to: [adminEmails[0]], // resend.dev sandbox: can only send to the Resend account owner
+      from: 'Call Calendar <noreply@ssrounds.com>',
+      to: adminEmails,
       subject: 'New user requesting access — Call Calendar',
       text: `A new user signed in and is waiting for access:\n\n  ${user.email}\n\nLog in and go to Settings → Users to approve them.`,
       html: `<p>A new user signed in and is waiting for access:</p><p style="font-size:1.1em;font-weight:bold">${user.email}</p><p>Log in and go to <strong>Settings → Users</strong> to approve them.</p>`,
