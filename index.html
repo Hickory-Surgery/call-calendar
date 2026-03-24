@@ -3252,11 +3252,18 @@
 
     function personRowHtml(y, m, d, person, inBand, amIn = true, pmIn = true, weekend = false) {
       const { am, pm, oncall_am, oncall_pm, exception } = getCell(y, m, d, person);
-      // Hide name after the specific stop date (row still shown through end of month)
-      const stopDate = staffByShortName[person]?.stop_date;
-      const nameHidden = stopDate && (() => {
-        const [ey, em, ed] = stopDate.split('-').map(Number);
-        return y > ey || (y === ey && m + 1 > em) || (y === ey && m + 1 === em && d > ed);
+      // Hide name before start date or after stop date (row still shown through boundary month)
+      const row0 = staffByShortName[person];
+      const nameHidden = (() => {
+        if (row0?.start_date) {
+          const [sy, sm, sd] = row0.start_date.split('-').map(Number);
+          if (y < sy || (y === sy && m + 1 < sm) || (y === sy && m + 1 === sm && d < sd)) return true;
+        }
+        if (row0?.stop_date) {
+          const [ey, em, ed] = row0.stop_date.split('-').map(Number);
+          if (y > ey || (y === ey && m + 1 > em) || (y === ey && m + 1 === em && d > ed)) return true;
+        }
+        return false;
       })();
       const nm = nameHidden ? '' : esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
