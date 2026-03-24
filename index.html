@@ -213,14 +213,8 @@
       background: #ECEEF1;
     }
 
-    .bari-hint {
-      font-size: 0.62rem;
-      font-weight: 400;
-      color: #B0BEC5;
-      margin-left: 4px;
-      flex-shrink: 0;
-    }
-    .today .bari-hint { color: rgba(255,255,255,0.55); }
+    .date-warn-backup { color: #E53935; }
+    .date-warn-bari   { color: #FF8F00; }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -3196,11 +3190,36 @@
           return c.am === 'hosp' || c.pm === 'hosp';
         }) ?? '';
       }
-      const wk = weekKey(new Date(y, m, d));
+      // weekKey expects Saturday — compute it from dow for weekday cells
+      const satDate = (dow === 6 || dow === 0) ? new Date(y, m, d) : new Date(y, m, d + (6 - dow));
+      const wk = weekKey(satDate);
       const dropdown = bariCall[wk] ?? '';
       return bariatric[callPerson] ? callPerson
            : bariatric[backupPerson] ? backupPerson
            : dropdown;
+    }
+
+    // Returns CSS class for coverage warning on the day number ('date-warn-backup' | 'date-warn-bari' | '')
+    // Only returns a class for admin/scheduler users; empty string means no warning.
+    function dayCoverageClass(y, m, d, dow) {
+      if (!canEdit()) return '';
+      if (!staff.length) return '';
+      const firstCell = getCell(y, m, d, staff[0]);
+      const closed = dow === 6 ? firstCell.am === 'CLOSED'
+                   : dow === 0 ? firstCell.pm === 'CLOSED'
+                   :             firstCell.am === 'CLOSED';
+      if (closed) return '';
+      const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
+      let backup = exceptionPerson || (staff.find(p => {
+        const c = getCell(y, m, d, p);
+        return dow === 6 ? c.am === 'hosp' : dow === 0 ? c.pm === 'hosp' : (c.am === 'hosp' || c.pm === 'hosp');
+      }) ?? '');
+      if (!backup && (dow === 0 || dow === 6)) {
+        backup = staff.find(p => { const c = getCell(y, m, d - 1, p); return c.am === 'hosp' || c.pm === 'hosp'; }) ?? '';
+      }
+      if (!backup) return 'date-warn-backup';
+      if (!bariPersonForDay(y, m, d, dow)) return 'date-warn-bari';
+      return '';
     }
 
     function staffActiveInMonth(name, ry, rm) {
@@ -3226,13 +3245,10 @@
       if (isToday) cls += ' today';
       if (!inMonth) cls += ' out-of-month';
 
-      const dateInner = d;
-      const bariHint = inMonth ? (() => {
-        const dow = date.getDay();
-        const bp = bariPersonForDay(y, m, d, dow);
-        return bp ? `<span class="bari-hint">${esc(bp)}</span>` : '';
-      })() : '';
-      let html = `<div class="${cls}"><div class="cell-date">${dateInner}${bariHint}</div>`;
+      const dow = date.getDay();
+      const warnCls = inMonth ? dayCoverageClass(y, m, d, dow) : '';
+      const dateSpan = warnCls ? `<span class="${warnCls}">${d}</span>` : d;
+      let html = `<div class="${cls}"><div class="cell-date">${dateSpan}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
@@ -3274,10 +3290,14 @@
         ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call"${canEdit() ? '' : ' disabled'}>${bariOptions}</select>`
         : '';
 
-      const satBari = inMonth ? bariPersonForDay(y, m, d, 6) : '';
-      const sunBari = inMonth ? bariPersonForDay(y, m, d, 0) : '';
-      const bariHintWe = (satBari || sunBari) ? `<span class="bari-hint">${esc(satBari || '—')} / ${esc(sunBari || '—')}</span>` : '';
-      let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${bariHintWe}${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
+      // Use worst-case warning across both Saturday and Sunday
+      const satWarn = inMonth ? dayCoverageClass(y, m, d, 6) : '';
+      const sunWarn = inMonth ? dayCoverageClass(y, m, d, 0) : '';
+      const weWarn = satWarn === 'date-warn-backup' || sunWarn === 'date-warn-backup' ? 'date-warn-backup'
+                   : satWarn === 'date-warn-bari'   || sunWarn === 'date-warn-bari'   ? 'date-warn-bari'
+                   : '';
+      const dateSpanCls = weWarn ? ` class="${weWarn}"` : '';
+      let html = `<div class="${cls}"><div class="cell-date"><span${dateSpanCls}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
