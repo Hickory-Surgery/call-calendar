@@ -215,6 +215,7 @@
 
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
+    .cell-date-num[data-cov-y] { cursor: pointer; }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -1937,6 +1938,34 @@
     </div>
   </div>
 
+  <!-- Coverage override panel -->
+  <div class="sheet-overlay" id="coverageOverlay">
+    <div class="sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title-row">
+        <div class="sheet-title" id="coverageTitle"></div>
+        <button class="btn-clear-inline" id="coverageClearBtn">Clear override</button>
+      </div>
+      <div id="coverageBody" style="padding:12px 16px 4px">
+        <div id="coverageComputed" style="font-size:0.78rem;color:#90A4AE;margin-bottom:14px"></div>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem">
+            <span style="min-width:110px;color:#546E7A">Backup override</span>
+            <select id="coverageBackupSel" style="flex:1;padding:6px 8px;border:1px solid #CFD8DC;border-radius:6px;font-size:0.85rem"></select>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem">
+            <span style="min-width:110px;color:#546E7A">Bari override</span>
+            <select id="coverageBariSel" style="flex:1;padding:6px 8px;border:1px solid #CFD8DC;border-radius:6px;font-size:0.85rem"></select>
+          </label>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-save" id="coverageSaveBtn">Save</button>
+          <button class="btn btn-cancel" id="coverageCloseBtn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings panel -->
   <div class="sheet-overlay" id="settingsOverlay">
     <div class="sheet">
@@ -2229,7 +2258,7 @@
       sessionApplied = false;
       if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
       await fetchStaff();
-      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
       setupRealtimeSubscriptions();
       render();
       updateDaySummary();
@@ -2270,7 +2299,7 @@
       currentUser = session.user;
       currentRole = role;
       await fetchStaff();
-      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
       setupRealtimeSubscriptions();
       render();
       updateDaySummary();
@@ -2339,6 +2368,7 @@
     let data = {};
     let bariatric = {};
     let bariCall = {};
+    let coverageOverrides = {}; // { "YYYY-MM-DD": { backup: shortName|'', bari: shortName|'' } }
     let fullnames = {};
     let editing = null;
 
@@ -2426,6 +2456,17 @@
         if (!staffRow) continue;
         const { y, m, d } = isoToDateParts(row.week_start);
         bariCall[`${y}-${m + 1}-${d}`] = staffRow.short_name;
+      }
+    }
+
+    async function fetchCoverageOverrides() {
+      const { data: rows } = await sb.from('coverage_overrides').select('date, backup_id, bari_id');
+      coverageOverrides = {};
+      for (const row of rows ?? []) {
+        coverageOverrides[row.date] = {
+          backup: row.backup_id ? (staffById[row.backup_id]?.short_name ?? '') : null,
+          bari:   row.bari_id   ? (staffById[row.bari_id]?.short_name   ?? '') : null,
+        };
       }
     }
 
@@ -2687,6 +2728,19 @@
           }
           render();
           updateDaySummary();
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'coverage_overrides' }, payload => {
+          const { eventType, new: n, old: o } = payload;
+          const dateIso = eventType === 'DELETE' ? o.date : n.date;
+          if (eventType === 'DELETE') {
+            delete coverageOverrides[dateIso];
+          } else {
+            coverageOverrides[dateIso] = {
+              backup: n.backup_id ? (staffById[n.backup_id]?.short_name ?? '') : null,
+              bari:   n.bari_id   ? (staffById[n.bari_id]?.short_name   ?? '') : null,
+            };
+          }
+          render();
         })
         .subscribe();
     }
@@ -3166,31 +3220,34 @@
       // -55%: only headings in the top half of the viewport update the label
     }
 
-    // Returns false if the staff member has a start/stop date that excludes the given month.
-    // ry = full year, rm = 0-based month (JS convention).
-    // Returns the short name of the bariatric call person for a given day.
+    // Returns the short name of the algorithmic backup (day-call/HOSP) person for a given day.
     // y/m/d = Saturday's date for weekend cells; dow distinguishes Sat(6) vs Sun(0) vs weekday.
+    function backupPersonForDay(y, m, d, dow) {
+      const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
+      let backup = exceptionPerson || (staff.find(p => {
+        const c = getCell(y, m, d, p);
+        return dow === 6 ? c.am === 'hosp' : dow === 0 ? c.pm === 'hosp' : (c.am === 'hosp' || c.pm === 'hosp');
+      }) ?? '');
+      if (!backup && (dow === 0 || dow === 6)) {
+        backup = staff.find(p => { const c = getCell(y, m, d - 1, p); return c.am === 'hosp' || c.pm === 'hosp'; }) ?? '';
+      }
+      return backup;
+    }
+
+    // Returns the short name of the bariatric call person for a given day.
+    // Override (if set) takes priority over algorithm.
     function bariPersonForDay(y, m, d, dow) {
+      const iso = isoFromParts(y, m, d);
+      const ov = coverageOverrides[iso];
+      if (ov?.bari !== null && ov?.bari !== undefined) return ov.bari;
       function isOnCallDay(c) {
         if (dow === 6) return c.oncall_am !== 'none';
         if (dow === 0) return c.oncall_pm !== 'none';
         return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
       }
-      function isHospDay(c) {
-        if (dow === 6) return c.am === 'hosp';
-        if (dow === 0) return c.pm === 'hosp';
-        return c.am === 'hosp' || c.pm === 'hosp';
-      }
       const callPerson = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
-      const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
-      let backupPerson = exceptionPerson || (staff.find(p => isHospDay(getCell(y, m, d, p))) ?? '');
-      if (!backupPerson && (dow === 0 || dow === 6)) {
-        backupPerson = staff.find(p => {
-          const c = getCell(y, m, d - 1, p); // Friday hosp fallback
-          return c.am === 'hosp' || c.pm === 'hosp';
-        }) ?? '';
-      }
-      // weekKey expects Saturday — compute it from dow for weekday cells
+      const backupPerson = backupPersonForDay(y, m, d, dow);
+      // weekKey expects Saturday — compute from dow for weekday cells
       const satDate = (dow === 6 || dow === 0) ? new Date(y, m, d) : new Date(y, m, d + (6 - dow));
       const wk = weekKey(satDate);
       const dropdown = bariCall[wk] ?? '';
@@ -3200,18 +3257,13 @@
     }
 
     // Returns CSS class for coverage warning on the day number ('date-warn-backup' | 'date-warn-bari' | '')
-    // Only returns a class for admin/scheduler users; empty string means no warning.
+    // Only for admin/scheduler; override takes priority over algorithm.
     function dayCoverageClass(y, m, d, dow) {
       if (!canEdit()) return '';
       if (!staff.length) return '';
-      const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
-      let backup = exceptionPerson || (staff.find(p => {
-        const c = getCell(y, m, d, p);
-        return dow === 6 ? c.am === 'hosp' : dow === 0 ? c.pm === 'hosp' : (c.am === 'hosp' || c.pm === 'hosp');
-      }) ?? '');
-      if (!backup && (dow === 0 || dow === 6)) {
-        backup = staff.find(p => { const c = getCell(y, m, d - 1, p); return c.am === 'hosp' || c.pm === 'hosp'; }) ?? '';
-      }
+      const iso = isoFromParts(y, m, d);
+      const ov = coverageOverrides[iso];
+      const backup = (ov?.backup !== null && ov?.backup !== undefined) ? ov.backup : backupPersonForDay(y, m, d, dow);
       if (!backup) return 'date-warn-backup';
       if (!bariPersonForDay(y, m, d, dow)) return 'date-warn-bari';
       return '';
@@ -3242,7 +3294,8 @@
 
       const dow = date.getDay();
       const warnCls = inMonth ? dayCoverageClass(y, m, d, dow) : '';
-      const dateSpan = warnCls ? `<span class="${warnCls}">${d}</span>` : d;
+      const editAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}"` : '';
+      const dateSpan = `<span class="cell-date-num${warnCls ? ' ' + warnCls : ''}"${editAttr}>${d}</span>`;
       let html = `<div class="${cls}"><div class="cell-date">${dateSpan}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
@@ -3291,8 +3344,8 @@
       const weWarn = satWarn === 'date-warn-backup' || sunWarn === 'date-warn-backup' ? 'date-warn-backup'
                    : satWarn === 'date-warn-bari'   || sunWarn === 'date-warn-bari'   ? 'date-warn-bari'
                    : '';
-      const dateSpanCls = weWarn ? ` class="${weWarn}"` : '';
-      let html = `<div class="${cls}"><div class="cell-date"><span${dateSpanCls}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
+      const weEditAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}" data-cov-weekend="1"` : '';
+      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
@@ -3579,6 +3632,111 @@
       setEditHighlight(null);
       editing = null;
     }
+
+    // ─────────────────────────────────────────────
+    //  Coverage override panel
+    // ─────────────────────────────────────────────
+
+    let coverageEditing = null; // { y, m, d, isWeekend }
+
+    function openCoverageEdit(y, m, d, isWeekend) {
+      if (!canEdit()) return;
+      coverageEditing = { y, m, d, isWeekend };
+      const iso = isoFromParts(y, m, d);
+      const ov = coverageOverrides[iso] ?? {};
+
+      // Title
+      const label = isWeekend
+        ? `Sat ${MONTHS[m]} ${d} / Sun ${MONTHS[m]} ${d + 1}`
+        : `${DAYS[new Date(y, m, d).getDay()]} ${MONTHS[m]} ${d}`;
+      document.getElementById('coverageTitle').textContent = `${label} — Coverage Override`;
+
+      // Computed values for the informational row
+      const compBackupSat = backupPersonForDay(y, m, d, 6);
+      const compBackupSun = backupPersonForDay(y, m, d, 0);
+      const compBariSat   = bariPersonForDay(y, m, d, 6);
+      const compBariSun   = bariPersonForDay(y, m, d, 0);
+      let compText;
+      if (isWeekend) {
+        const bk = compBackupSat || compBackupSun ? `${compBackupSat || '—'} / ${compBackupSun || '—'}` : '—';
+        const br = compBariSat || compBariSun ? `${compBariSat || '—'} / ${compBariSun || '—'}` : '—';
+        compText = `Computed  backup: ${bk}   bari: ${br}`;
+      } else {
+        const dow = new Date(y, m, d).getDay();
+        compText = `Computed  backup: ${backupPersonForDay(y, m, d, dow) || '—'}   bari: ${bariPersonForDay(y, m, d, dow) || '—'}`;
+      }
+      document.getElementById('coverageComputed').textContent = compText;
+
+      // Backup dropdown — all active staff
+      const backupSel = document.getElementById('coverageBackupSel');
+      backupSel.innerHTML = '<option value="">— use algorithm —</option>' +
+        staff.map(p => `<option value="${esc(p)}"${ov.backup === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
+      if (ov.backup === null || ov.backup === undefined) backupSel.value = '';
+
+      // Bari dropdown — bari-capable staff only
+      const bariSel = document.getElementById('coverageBariSel');
+      const bariStaff = staff.filter(p => bariatric[p]);
+      bariSel.innerHTML = '<option value="">— use algorithm —</option>' +
+        bariStaff.map(p => `<option value="${esc(p)}"${ov.bari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
+      if (ov.bari === null || ov.bari === undefined) bariSel.value = '';
+
+      document.getElementById('coverageOverlay').classList.add('open');
+    }
+
+    function closeCoverageEdit() {
+      document.getElementById('coverageOverlay').classList.remove('open');
+      coverageEditing = null;
+    }
+
+    document.getElementById('coverageOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('coverageOverlay')) closeCoverageEdit();
+    });
+    document.getElementById('coverageCloseBtn').addEventListener('click', closeCoverageEdit);
+
+    document.getElementById('coverageSaveBtn').addEventListener('click', async () => {
+      if (!coverageEditing) return;
+      const { y, m, d } = coverageEditing;
+      const iso = isoFromParts(y, m, d);
+      const backupVal = document.getElementById('coverageBackupSel').value;
+      const bariVal   = document.getElementById('coverageBariSel').value;
+      const backupRow = backupVal ? staffByShortName[backupVal] : null;
+      const bariRow   = bariVal   ? staffByShortName[bariVal]   : null;
+      const { error } = await sb.from('coverage_overrides').upsert({
+        date:       iso,
+        backup_id:  backupRow?.id ?? null,
+        bari_id:    bariRow?.id   ?? null,
+        updated_by: currentUser?.id ?? null,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) { showToast('Save failed — please try again.'); return; }
+      coverageOverrides[iso] = {
+        backup: backupRow?.short_name ?? null,
+        bari:   bariRow?.short_name   ?? null,
+      };
+      render();
+      closeCoverageEdit();
+    });
+
+    document.getElementById('coverageClearBtn').addEventListener('click', async () => {
+      if (!coverageEditing) return;
+      const { y, m, d } = coverageEditing;
+      const iso = isoFromParts(y, m, d);
+      const { error } = await sb.from('coverage_overrides').delete().eq('date', iso);
+      if (error) { showToast('Clear failed — please try again.'); return; }
+      delete coverageOverrides[iso];
+      render();
+      closeCoverageEdit();
+    });
+
+    // Event delegation — dblclick on any cell-date-num with data-cov-* attributes
+    getApp().addEventListener('dblclick', e => {
+      const span = e.target.closest('.cell-date-num[data-cov-y]');
+      if (!span) return;
+      e.stopPropagation();
+      const y = +span.dataset.covY, m = +span.dataset.covM, d = +span.dataset.covD;
+      const isWeekend = span.dataset.covWeekend === '1';
+      openCoverageEdit(y, m, d, isWeekend);
+    });
 
     const KEY_SHORTCUTS = { o: 'ov', h: 'hosp', c: 'C-surg', f: 'F-surg', a: 'admin', u: 'unavailable' };
 
@@ -4619,7 +4777,7 @@
         if (rows.length) await sb.from('bari_call').insert(rows);
       }
 
-      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
     }
 
     document.getElementById('importBtn').addEventListener('click', () => {
