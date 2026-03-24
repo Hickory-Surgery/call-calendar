@@ -112,6 +112,24 @@ Deno.serve(async (req) => {
 
   const bariCallPerson = bariRow ? (staffById[bariRow.person_id]?.short_name ?? '') : ''
 
+  // ── Fetch coverage overrides Mon–Sat ──────────────────────────────────────
+  const { data: ovRows } = await sb
+    .from('coverage_overrides')
+    .select('date, backup_id, bari_id')
+    .gte('date', iso(monday))
+    .lte('date', iso(saturday))
+
+  // overrides[dateIso] = { backup: shortName|'', bari: shortName|'' }
+  // null means "no override for this field"; '' means explicitly cleared
+  type Override = { backup: string | null; bari: string | null }
+  const overrides: Record<string, Override> = {}
+  for (const row of ovRows ?? []) {
+    overrides[row.date] = {
+      backup: row.backup_id ? (staffById[row.backup_id]?.short_name ?? '') : null,
+      bari:   row.bari_id   ? (staffById[row.bari_id]?.short_name   ?? '') : null,
+    }
+  }
+
   // ── Compute per-day summaries ─────────────────────────────────────────────
   type DaySummary = { date: Date; nightCall: string; dayCall: string; backup: string; bari: string; closed: boolean }
   const summaries: DaySummary[] = []
@@ -120,7 +138,7 @@ Deno.serve(async (req) => {
 
   for (const day of days) {
     const dow = day.getUTCDay() // 0=Sun, 6=Sat
-    // Weekend data lives under Saturday's date
+    // Weekend data lives under Saturday's date; overrides follow the same convention
     const dataIso = dow === 0 ? iso(saturday) : iso(day)
 
     function isOnCall(c: Cell): boolean {
@@ -147,8 +165,9 @@ Deno.serve(async (req) => {
     // Night call: first person with oncall set for this day's slot
     const callPerson = staffOrder.find(p => isOnCall(getCell(dataIso, p))) ?? ''
 
-    // Backup: first person with HOSP; weekends fall back to Friday
-    let backupPerson = staffOrder.find(p => isHosp(getCell(dataIso, p))) ?? ''
+    // Backup: exception person if present, else first HOSP; weekends fall back to Friday
+    const exceptionPerson = staffOrder.find(p => getCell(dataIso, p).exception) ?? ''
+    let backupPerson = exceptionPerson || (staffOrder.find(p => isHosp(getCell(dataIso, p))) ?? '')
     if (!backupPerson && (dow === 0 || dow === 6)) {
       backupPerson = staffOrder.find(p => {
         const c = getCell(friIso, p)
@@ -156,16 +175,23 @@ Deno.serve(async (req) => {
       }) ?? ''
     }
 
-    // Day call: exception (green pill) person if present, otherwise HOSP person
-    // Exception person also serves as backup
-    const exceptionPerson = staffOrder.find(p => getCell(dataIso, p).exception) ?? ''
+    // Apply backup override (override wins unless exception person present)
+    const ov = overrides[dataIso]
+    if (!exceptionPerson && ov?.backup !== null && ov?.backup !== undefined) {
+      backupPerson = ov.backup
+    }
+
     const dayCallPerson = exceptionPerson || backupPerson
-    if (exceptionPerson) backupPerson = exceptionPerson
 
     // Bariatric: call person if bari+, else backup if bari+, else dropdown
-    const bariPerson = bariatric[callPerson] ? callPerson
+    let bariPerson = bariatric[callPerson] ? callPerson
       : bariatric[backupPerson] ? backupPerson
       : bariCallPerson
+
+    // Apply bari override
+    if (ov?.bari !== null && ov?.bari !== undefined) {
+      bariPerson = ov.bari
+    }
 
     summaries.push({
       date: day,

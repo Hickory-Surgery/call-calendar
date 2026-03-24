@@ -4925,37 +4925,12 @@
       const cd = callDate();
       const dow = cd.getDay(); // 0=Sun, 6=Sat
 
-      // Sat/Sun share one data cell: am=Saturday, pm=Sunday.
-      // Only check the slot that matches the effective call day.
-      function isOnCall(c) {
-        if (dow === 6) return c.oncall_am !== 'none';
-        if (dow === 0) return c.oncall_pm !== 'none';
-        return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
-      }
-      function isHosp(c) {
-        if (dow === 6) return c.am === 'hosp';
-        if (dow === 0) return c.pm === 'hosp';
-        return c.am === 'hosp' || c.pm === 'hosp';
-      }
-
       // On call: first person with oncall set for today's slot
       const callPerson = staff.find(p => isOnCall(getCell(ty, tm, td, p))) || '';
 
-      // Backup: first person with hosp today; on weekends fall back to Friday
-      let backupPerson = staff.find(p => isHosp(getCell(ty, tm, td, p))) || '';
-      if (!backupPerson && (dow === 0 || dow === 6)) {
-        const fri = new Date(cd);
-        fri.setDate(cd.getDate() - (dow === 6 ? 1 : 2));
-        backupPerson = staff.find(p => {
-          const c = getCell(fri.getFullYear(), fri.getMonth(), fri.getDate(), p);
-          return c.am === 'hosp' || c.pm === 'hosp';
-        }) || '';
-      }
-
-      // Bariatric: call person if bariatric, else backup if bariatric, else dropdown
-      const bariPerson = bariatric[callPerson] ? callPerson
-        : bariatric[backupPerson] ? backupPerson
-          : bariCall[wk] || '';
+      // Backup and bari: use shared helpers so overrides are respected
+      const backupPerson = backupPersonForDay(ty, tm, td, dow);
+      const bariPerson   = bariPersonForDay(ty, tm, td, dow);
 
       function set(id, name) {
         const el = document.getElementById(id);
