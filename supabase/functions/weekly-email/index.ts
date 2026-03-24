@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
     <tbody>${rowsHtml}</tbody>
   </table>
   <p style="font-size:0.75rem;color:#90A4AE;margin-top:20px">
-    <a href="https://montycox.github.io/call-calendar/" style="color:#1565C0">View full calendar</a>
+    <a href="https://hickory-surgery.github.io/call-calendar/" style="color:#1565C0">View full calendar</a>
   </p>
 </body></html>`
 
