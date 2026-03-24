@@ -4501,7 +4501,9 @@
       scheduleMidnight();
       schedule7am();
 
-      // Catch midnight crossings missed while tab was hidden or computer slept
+      // Catch transitions missed while tab was hidden or computer slept:
+      // - date change (midnight): re-render calendar and update summary
+      // - 7am ET crossing: updateDaySummary() handles it via callDate()
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible') return;
         const now = new Date();
@@ -4509,8 +4511,8 @@
           today = now;
           document.getElementById('todayNum').textContent = today.getDate();
           render();
-          updateDaySummary();
         }
+        updateDaySummary(); // always refresh — callDate() reads current ET hour
       });
     })();
 
