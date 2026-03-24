@@ -3648,7 +3648,7 @@
       });
     }
 
-    function openSettings() {
+    async function openSettings() {
       const admin = isAdmin();
       const scheduler = effectiveRole() === 'scheduler';
 
@@ -3670,8 +3670,6 @@
       document.querySelectorAll('#settingsOverlay .editor-only').forEach(el => {
         el.style.display = (admin || scheduler) ? '' : 'none';
       });
-      if (admin || scheduler) loadRecipients();
-
       // View-as section: only real admins see this
       const viewAsSection = document.getElementById('viewAsSection');
       // Only show preview controls when admin and not already previewing (use banner to exit)
@@ -3686,15 +3684,18 @@
 
       renderStaffList();
       if (admin) {
-        fetchProfiles().then(renderUsersList);
-        fetchAuditLog();
-        fetchCurrentRates().then(rates => {
-          document.getElementById('rateFryeWd').value = rates.frye_weekday;
-          document.getElementById('rateFryeWe').value = rates.frye_weekend;
-          document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
-          document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
-        });
+        await Promise.all([
+          fetchProfiles().then(renderUsersList),
+          fetchAuditLog(),
+          fetchCurrentRates().then(rates => {
+            document.getElementById('rateFryeWd').value = rates.frye_weekday;
+            document.getElementById('rateFryeWe').value = rates.frye_weekend;
+            document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
+            document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
+          }),
+        ]);
       }
+      if (admin || scheduler) await loadRecipients();
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
       document.getElementById('accountSignedIn').style.display = currentUser ? 'block' : 'none';
       if (!currentUser) showSV('sv-signin');
