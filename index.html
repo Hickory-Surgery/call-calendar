@@ -3309,8 +3309,7 @@
       const ovTitle = iso ? coverageOverrideTitle(iso) : '';
       const editAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}"` : '';
       const titleAttr = ovTitle ? ` title="${esc(ovTitle)}"` : '';
-      const ovCls = ovTitle ? ' date-has-override' : '';
-      const dateSpan = `<span class="cell-date-num${warnCls ? ' ' + warnCls : ''}${ovCls}"${editAttr}${titleAttr}>${d}</span>`;
+      const dateSpan = `<span class="cell-date-num${warnCls ? ' ' + warnCls : ''}"${editAttr}${titleAttr}>${d}</span>`;
       let html = `<div class="${cls}"><div class="cell-date">${dateSpan}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
@@ -3363,8 +3362,7 @@
       const weOvTitle = weIso ? coverageOverrideTitle(weIso) : '';
       const weEditAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}" data-cov-weekend="1"` : '';
       const weTitleAttr = weOvTitle ? ` title="${esc(weOvTitle)}"` : '';
-      const weOvCls = weOvTitle ? ' date-has-override' : '';
-      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}${weOvCls}"${weEditAttr}${weTitleAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
+      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}${weTitleAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
@@ -3405,15 +3403,17 @@
       })();
       const nm = nameHidden ? '' : esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
+      const ov = coverageOverrides[isoFromParts(y, m, d)];
+      const ovCls = !nameHidden && ov && (ov.backup === person || ov.bari === person) ? ' date-has-override' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
         return `<div class="closed-row${callCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-          <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
+          <span class="pname-closed${ovCls}">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
       if (!am && !pm && oncall_am === 'none' && oncall_pm === 'none' && isHoliday(y, m, d)) {
         return `<div class="closed-row holiday-closed${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-          <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
+          <span class="pname-closed${ovCls}">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
       const amTxt = abbr(am), pmTxt = abbr(pm);
@@ -3421,7 +3421,7 @@
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (pmIn && oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
       const draggable = canEdit() && (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-        <span class="pname">${nm}</span>
+        <span class="pname${ovCls}">${nm}</span>
         <span class="slots">
           <span class="${amCls}"${weekend ? ' data-slot="am"' : ''}>${amTxt ? esc(amTxt) : weekend ? '&nbsp;' : '—'}</span>
           <span class="slot-sep"></span>
