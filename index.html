@@ -2606,20 +2606,41 @@
       return [d.getFullYear(), d.getMonth(), d.getDate()];
     }
 
-    // Returns true for the 6 observed federal holidays that fall on a weekday.
-    // m is 0-indexed; weekends return false.
+    // Returns the observed weekday for a fixed-date holiday.
+    // Rule: Saturday → preceding Friday; Sunday → following Monday.
+    function observedDate(hy, hm, hd) {
+      const dow = new Date(hy, hm, hd).getDay();
+      if (dow === 6) { const f = new Date(hy, hm, hd - 1); return [f.getFullYear(), f.getMonth(), f.getDate()]; }
+      if (dow === 0) { const f = new Date(hy, hm, hd + 1); return [f.getFullYear(), f.getMonth(), f.getDate()]; }
+      return [hy, hm, hd];
+    }
+
+    // Returns true if (y, m, d) is the observed date of a federal holiday.
+    // m is 0-indexed; actual weekends always return false.
     function isHoliday(y, m, d) {
-      const dow = new Date(y, m, d).getDay(); // 0=Sun, 6=Sat
+      const dow = new Date(y, m, d).getDay();
       if (dow === 0 || dow === 6) return false;
-      if (m === 0  && d === 1)  return true;  // New Year's Day
-      if (m === 6  && d === 4)  return true;  // Independence Day
-      if (m === 11 && d === 25) return true;  // Christmas Day
+
+      function matches(hy, hm, hd) {
+        const [oy, om, od] = observedDate(hy, hm, hd);
+        return y === oy && m === om && d === od;
+      }
+
+      // Fixed-date holidays (with observed-date shift)
+      if (matches(y, 0,  1))  return true;  // New Year's Day
+      if (matches(y, 6,  4))  return true;  // Independence Day
+      if (matches(y, 11, 25)) return true;  // Christmas Day
+      // Edge case: Jan 1 next year falls on Saturday → Dec 31 this year is observed
+      if (matches(y + 1, 0, 1)) return true;
+
+      // Floating holidays (always weekdays by definition)
       // Memorial Day: last Monday of May
-      if (m === 4 && dow === 1 && new Date(y, m, d + 7).getMonth() !== m) return true;
+      if (m === 4  && dow === 1 && new Date(y, m, d + 7).getMonth() !== m) return true;
       // Labor Day: first Monday of September
-      if (m === 8 && dow === 1 && d <= 7) return true;
+      if (m === 8  && dow === 1 && d <= 7) return true;
       // Thanksgiving: 4th Thursday of November
       if (m === 10 && dow === 4 && d >= 22 && d <= 28) return true;
+
       return false;
     }
 
