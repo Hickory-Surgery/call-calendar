@@ -1929,13 +1929,15 @@
           <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
 
           <div class="email-recipients-section editor-only" id="emailRecipientsSection">
-            <div class="rates-section-title">Weekly Email Recipients</div>
-            <div class="recipient-list" id="recipientList"></div>
-            <div class="recipient-add-row">
-              <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off">
-              <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
+            <div class="rates-section-title" id="recipientsToggle" style="cursor:pointer;user-select:none">Weekly Email Recipients ›</div>
+            <div id="recipientsBody" style="display:none">
+              <div class="recipient-list" id="recipientList"></div>
+              <div class="recipient-add-row">
+                <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off">
+                <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
+              </div>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated Friday schedule email.</div>
             </div>
-            <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated Friday schedule email.</div>
           </div>
 
           <div class="rates-section admin-only" id="ratesSection">
@@ -3844,6 +3846,13 @@
       viewAsRole = null;
       syncRolePreviewBanner();
       render();
+    });
+
+    document.getElementById('recipientsToggle').addEventListener('click', () => {
+      const body = document.getElementById('recipientsBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('recipientsToggle').textContent = open ? 'Weekly Email Recipients ›' : 'Weekly Email Recipients ↓';
     });
 
     document.getElementById('ratesToggle').addEventListener('click', () => {
