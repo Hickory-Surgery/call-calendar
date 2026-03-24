@@ -3678,26 +3678,28 @@
       if (personEditableOnDate(person, py, pm2, pd)) {
         openEdit(py, pm2, pd, person);
       } else {
-        // Blank cell — find prev person's most recent editable day going back from here
+        // Blank cell — search from the Saturday of the *current* week (the week containing
+        // the editing cell y/m/d) backward through each prev person to find their last editable day.
         const personIdx = staff.indexOf(person);
+        const curDow = new Date(y, m, d).getDay(); // dow of the cell being edited (1–6)
+        const satOfWeek = new Date(y, m, d + (6 - curDow)); // Saturday of this same week
+        const sw_y = satOfWeek.getFullYear(), sw_m = satOfWeek.getMonth(), sw_d = satOfWeek.getDate();
         for (let i = personIdx - 1; i >= 0; i--) {
-          let cur = new Date(py, pm2, pd);
-          for (let j = 0; j < 365; j++) {
-            const cy = cur.getFullYear(), cm = cur.getMonth(), cd = cur.getDate();
-            if (personEditableOnDate(staff[i], cy, cm, cd)) {
-              if (cm !== m || cy !== y) scrollToMonth(cy, cm);
-              else if (!document.getElementById(`month-${cy}-${cm}`)) appendNextMonth();
-              openEdit(cy, cm, cd, staff[i]);
+          // Walk Sat → Fri → … → Mon of this week (skip Sunday — weekend stored under Sat)
+          for (let delta = 0; delta <= 5; delta++) {
+            const cur = new Date(sw_y, sw_m, sw_d - delta);
+            if (cur.getDay() === 0) continue; // skip Sunday
+            const cy = cur.getFullYear(), cm2 = cur.getMonth(), cd = cur.getDate();
+            if (personEditableOnDate(staff[i], cy, cm2, cd)) {
+              if (cm2 !== m || cy !== y) scrollToMonth(cy, cm2);
+              else if (!document.getElementById(`month-${cy}-${cm2}`)) appendNextMonth();
+              openEdit(cy, cm2, cd, staff[i]);
               return;
             }
-            const d2 = cur.getDay();
-            cur = d2 === 1 ? new Date(cy, cm, cd - 2)
-                : d2 === 0 ? new Date(cy, cm, cd - 1)
-                :             new Date(cy, cm, cd - 1);
           }
         }
-        // No prev person at all — retreat to prev week's last editable staff
-        const prev2 = new Date(py, pm2, pd - 7);
+        // No prev person found in this week — retreat to prior week's last editable staff
+        const prev2 = new Date(sw_y, sw_m, sw_d - 7);
         const py2 = prev2.getFullYear(), pm3 = prev2.getMonth(), pd2 = prev2.getDate();
         if (pm3 !== m || py2 !== y) scrollToMonth(py2, pm3);
         else if (!document.getElementById(`month-${py2}-${pm3}`)) appendNextMonth();
