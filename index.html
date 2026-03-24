@@ -3582,14 +3582,19 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      const dow = new Date(y, m, d).getDay();
-      const next = dow === 5 ? new Date(y, m, d + 1)
-        : dow === 6 ? new Date(y, m, d + 2)
-          : new Date(y, m, d + 1);
-      const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
-      if (nm !== m || ny !== y) scrollToMonth(ny, nm);
-      else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
-      openEdit(ny, nm, nd, person);
+      let cur = new Date(y, m, d);
+      for (let i = 0; i < 365; i++) {
+        const dow = cur.getDay();
+        cur = dow === 5 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1)
+            : dow === 6 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 2)
+            :             new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
+        const ny = cur.getFullYear(), nm = cur.getMonth(), nd = cur.getDate();
+        if (!personEditableOnDate(person, ny, nm, nd)) continue;
+        if (nm !== m || ny !== y) scrollToMonth(ny, nm);
+        else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
+        openEdit(ny, nm, nd, person);
+        return;
+      }
     }
 
     function saveAndAdvanceDown() {
@@ -3641,14 +3646,19 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      const dow = new Date(y, m, d).getDay();
-      const prev = dow === 1 ? new Date(y, m, d - 2)   // Mon → skip back to Sat
-        : dow === 0 ? new Date(y, m, d - 1)   // Sun → Sat
-          : new Date(y, m, d - 1);
-      const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
-      if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
-      else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
-      openEdit(py, pm2, pd, person);
+      let cur = new Date(y, m, d);
+      for (let i = 0; i < 365; i++) {
+        const dow = cur.getDay();
+        cur = dow === 1 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 2)   // Mon → Sat
+            : dow === 0 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 1)   // Sun → Sat
+            :             new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 1);
+        const py = cur.getFullYear(), pm2 = cur.getMonth(), pd = cur.getDate();
+        if (!personEditableOnDate(person, py, pm2, pd)) continue;
+        if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
+        else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
+        openEdit(py, pm2, pd, person);
+        return;
+      }
     }
 
     document.getElementById('editOverlay').addEventListener('click', e => {
