@@ -3582,18 +3582,20 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      let cur = new Date(y, m, d);
-      for (let i = 0; i < 365; i++) {
-        const dow = cur.getDay();
-        cur = dow === 5 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1)
-            : dow === 6 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 2)
-            :             new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() + 1);
-        const ny = cur.getFullYear(), nm = cur.getMonth(), nd = cur.getDate();
-        if (!personEditableOnDate(person, ny, nm, nd)) continue;
-        if (nm !== m || ny !== y) scrollToMonth(ny, nm);
-        else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
+      const dow = new Date(y, m, d).getDay();
+      const next = dow === 5 ? new Date(y, m, d + 1)
+          : dow === 6 ? new Date(y, m, d + 2)
+          :             new Date(y, m, d + 1);
+      const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
+      if (nm !== m || ny !== y) scrollToMonth(ny, nm);
+      else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
+      if (personEditableOnDate(person, ny, nm, nd)) {
         openEdit(ny, nm, nd, person);
-        return;
+      } else {
+        // Person's cell is blank on next day — drop to first editable person of that day
+        for (let i = 0; i < staff.length; i++) {
+          if (personEditableOnDate(staff[i], ny, nm, nd)) { openEdit(ny, nm, nd, staff[i]); return; }
+        }
       }
     }
 
@@ -3646,18 +3648,20 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
-      let cur = new Date(y, m, d);
-      for (let i = 0; i < 365; i++) {
-        const dow = cur.getDay();
-        cur = dow === 1 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 2)   // Mon → Sat
-            : dow === 0 ? new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 1)   // Sun → Sat
-            :             new Date(cur.getFullYear(), cur.getMonth(), cur.getDate() - 1);
-        const py = cur.getFullYear(), pm2 = cur.getMonth(), pd = cur.getDate();
-        if (!personEditableOnDate(person, py, pm2, pd)) continue;
-        if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
-        else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
+      const dow = new Date(y, m, d).getDay();
+      const prev = dow === 1 ? new Date(y, m, d - 2)   // Mon → Sat
+          : dow === 0 ? new Date(y, m, d - 1)           // Sun → Sat
+          :             new Date(y, m, d - 1);
+      const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
+      if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
+      else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
+      if (personEditableOnDate(person, py, pm2, pd)) {
         openEdit(py, pm2, pd, person);
-        return;
+      } else {
+        // Person's cell is blank on prev day — climb to last editable person of that day
+        for (let i = staff.length - 1; i >= 0; i--) {
+          if (personEditableOnDate(staff[i], py, pm2, pd)) { openEdit(py, pm2, pd, staff[i]); return; }
+        }
       }
     }
 
