@@ -215,6 +215,15 @@
 
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
+    .cov-grid { width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:4px; }
+    .cov-grid th { padding:4px 10px 6px; text-align:center; color:#546E7A; font-weight:600; font-size:0.8rem; border-bottom:2px solid #ECEFF1; }
+    .cov-grid th:first-child { text-align:left; }
+    .cov-grid td { padding:5px 10px; vertical-align:middle; }
+    .cov-grid td:not(:first-child) { text-align:center; }
+    .cov-grid .cov-computed td { font-size:0.8rem; color:#90A4AE; border-bottom:1px solid #ECEFF1; padding-bottom:8px; }
+    .cov-grid .cov-computed td:not(:first-child) { font-weight:600; color:#78909C; }
+    .cov-grid .cov-person td:first-child { color:#37474F; font-weight:500; }
+    .cov-grid input[type=checkbox] { width:16px; height:16px; cursor:pointer; accent-color:#1565C0; }
     .cell-date-num[data-cov-y] { cursor: pointer; }
     .date-has-override { outline: 1.5px solid #1565C0; outline-offset: 2px; border-radius: 2px; }
 
@@ -1947,18 +1956,8 @@
         <div class="sheet-title" id="coverageTitle"></div>
         <button class="btn-clear-inline" id="coverageClearBtn">Clear override</button>
       </div>
-      <div id="coverageBody" style="padding:12px 16px 4px">
-        <div id="coverageComputed" style="font-size:0.84rem;color:#90A4AE;margin-bottom:14px"></div>
-        <div style="display:flex;flex-direction:column;gap:12px">
-          <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem">
-            <span style="min-width:110px;color:#546E7A">Backup override</span>
-            <select id="coverageBackupSel" style="flex:1;padding:6px 8px;border:1px solid #CFD8DC;border-radius:6px;font-size:0.85rem"></select>
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem">
-            <span style="min-width:110px;color:#546E7A">Bari override</span>
-            <select id="coverageBariSel" style="flex:1;padding:6px 8px;border:1px solid #CFD8DC;border-radius:6px;font-size:0.85rem"></select>
-          </label>
-        </div>
+      <div id="coverageBody" style="padding:8px 16px 4px">
+        <div id="coverageGrid"></div>
         <div class="btn-row">
           <button class="btn btn-save" id="coverageSaveBtn">Save</button>
           <button class="btn btn-cancel" id="coverageCloseBtn">Cancel</button>
@@ -3670,34 +3669,49 @@
         : `${DAYS[new Date(y, m, d).getDay()]} ${MONTHS[m]} ${d}`;
       document.getElementById('coverageTitle').textContent = `${label} — Coverage Override`;
 
-      // Computed values for the informational row
-      const compBackupSat = backupPersonForDay(y, m, d, 6);
-      const compBackupSun = backupPersonForDay(y, m, d, 0);
-      const compBariSat   = bariPersonForDay(y, m, d, 6);
-      const compBariSun   = bariPersonForDay(y, m, d, 0);
-      let compText;
-      if (isWeekend) {
-        const bk = compBackupSat || compBackupSun ? `${compBackupSat || '—'} / ${compBackupSun || '—'}` : '—';
-        const br = compBariSat || compBariSun ? `${compBariSat || '—'} / ${compBariSun || '—'}` : '—';
-        compText = `Computed  backup: ${bk}   bari: ${br}`;
-      } else {
-        const dow = new Date(y, m, d).getDay();
-        compText = `Computed  backup: ${backupPersonForDay(y, m, d, dow) || '—'}   bari: ${bariPersonForDay(y, m, d, dow) || '—'}`;
-      }
-      document.getElementById('coverageComputed').textContent = compText;
+      // Computed values (ignoring any existing override for display)
+      const dow = isWeekend ? 6 : new Date(y, m, d).getDay();
+      const compBackup = backupPersonForDay(y, m, d, dow);
+      const compBari   = bariPersonForDay(y, m, d, dow);
 
-      // Backup dropdown — all active staff
-      const backupSel = document.getElementById('coverageBackupSel');
-      backupSel.innerHTML = '<option value="">— use algorithm —</option>' +
-        staff.map(p => `<option value="${esc(p)}"${ov.backup === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
-      if (ov.backup === null || ov.backup === undefined) backupSel.value = '';
+      // Build checkbox grid
+      const rows = staff.map(p => {
+        const sn = shortName(p);
+        const backupChecked = ov.backup === p ? ' checked' : '';
+        const bariCell = bariatric[p]
+          ? `<td><input type="checkbox" class="cov-bari-cb" data-person="${esc(p)}"${ov.bari === p ? ' checked' : ''}></td>`
+          : '<td></td>';
+        return `<tr class="cov-person">
+          <td>${esc(sn)}</td>
+          <td><input type="checkbox" class="cov-backup-cb" data-person="${esc(p)}"${backupChecked}></td>
+          ${bariCell}
+        </tr>`;
+      }).join('');
 
-      // Bari dropdown — bari-capable staff only
-      const bariSel = document.getElementById('coverageBariSel');
-      const bariStaff = staff.filter(p => bariatric[p]);
-      bariSel.innerHTML = '<option value="">— use algorithm —</option>' +
-        bariStaff.map(p => `<option value="${esc(p)}"${ov.bari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
-      if (ov.bari === null || ov.bari === undefined) bariSel.value = '';
+      document.getElementById('coverageGrid').innerHTML = `
+        <table class="cov-grid">
+          <thead>
+            <tr><th></th><th>Backup</th><th>Bari</th></tr>
+          </thead>
+          <tbody>
+            <tr class="cov-computed">
+              <td>Computed</td>
+              <td>${esc(shortName(compBackup) || '—')}</td>
+              <td>${esc(shortName(compBari) || '—')}</td>
+            </tr>
+            ${rows}
+          </tbody>
+        </table>`;
+
+      // Single-select per column
+      document.getElementById('coverageGrid').addEventListener('change', e => {
+        const cb = e.target;
+        if (cb.classList.contains('cov-backup-cb')) {
+          document.querySelectorAll('.cov-backup-cb').forEach(el => { if (el !== cb) el.checked = false; });
+        } else if (cb.classList.contains('cov-bari-cb')) {
+          document.querySelectorAll('.cov-bari-cb').forEach(el => { if (el !== cb) el.checked = false; });
+        }
+      });
 
       document.getElementById('coverageOverlay').classList.add('open');
     }
@@ -3716,8 +3730,10 @@
       if (!coverageEditing) return;
       const { y, m, d } = coverageEditing;
       const iso = isoFromParts(y, m, d);
-      const backupVal = document.getElementById('coverageBackupSel').value;
-      const bariVal   = document.getElementById('coverageBariSel').value;
+      const backupCb = document.querySelector('.cov-backup-cb:checked');
+      const bariCb   = document.querySelector('.cov-bari-cb:checked');
+      const backupVal = backupCb?.dataset.person ?? '';
+      const bariVal   = bariCb?.dataset.person   ?? '';
       const backupRow = backupVal ? staffByShortName[backupVal] : null;
       const bariRow   = bariVal   ? staffByShortName[bariVal]   : null;
       const { error } = await sb.from('coverage_overrides').upsert({
@@ -3729,8 +3745,8 @@
       });
       if (error) { showToast('Save failed — please try again.'); return; }
       coverageOverrides[iso] = {
-        backup: backupRow?.short_name ?? null,
-        bari:   bariRow?.short_name   ?? null,
+        backup: backupVal || null,
+        bari:   bariVal   || null,
       };
       render();
       closeCoverageEdit();
