@@ -3676,7 +3676,8 @@
       const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
       if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
       else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
-      if (personEditableOnDate(person, py, pm2, pd)) {
+      if (dow !== 1 && personEditableOnDate(person, py, pm2, pd)) {
+        // Monday is always a row boundary — fall through to prev-person logic
         openEdit(py, pm2, pd, person);
       } else {
         // Blank cell — search from the Saturday of the *current* week (the week containing
