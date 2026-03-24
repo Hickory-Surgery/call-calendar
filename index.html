@@ -3470,6 +3470,16 @@
     }
 
     function openEdit(y, m, d, person, slot = null) {
+      // Block editing for a person whose name is hidden on this date (outside start/stop bounds)
+      const row0 = staffByShortName[person];
+      if (row0?.start_date) {
+        const [sy, sm, sd] = row0.start_date.split('-').map(Number);
+        if (y < sy || (y === sy && m + 1 < sm) || (y === sy && m + 1 === sm && d < sd)) return;
+      }
+      if (row0?.stop_date) {
+        const [ey, em, ed] = row0.stop_date.split('-').map(Number);
+        if (y > ey || (y === ey && m + 1 > em) || (y === ey && m + 1 === em && d > ed)) return;
+      }
       editing = { y, m, d, person, slot };
       const cell = getCell(y, m, d, person);
 
