@@ -3469,17 +3469,21 @@
       });
     }
 
-    function openEdit(y, m, d, person, slot = null) {
-      // Block editing for a person whose name is hidden on this date (outside start/stop bounds)
+    function personEditableOnDate(person, y, m, d) {
       const row0 = staffByShortName[person];
       if (row0?.start_date) {
         const [sy, sm, sd] = row0.start_date.split('-').map(Number);
-        if (y < sy || (y === sy && m + 1 < sm) || (y === sy && m + 1 === sm && d < sd)) return;
+        if (y < sy || (y === sy && m + 1 < sm) || (y === sy && m + 1 === sm && d < sd)) return false;
       }
       if (row0?.stop_date) {
         const [ey, em, ed] = row0.stop_date.split('-').map(Number);
-        if (y > ey || (y === ey && m + 1 > em) || (y === ey && m + 1 === em && d > ed)) return;
+        if (y > ey || (y === ey && m + 1 > em) || (y === ey && m + 1 === em && d > ed)) return false;
       }
+      return true;
+    }
+
+    function openEdit(y, m, d, person, slot = null) {
+      if (!personEditableOnDate(person, y, m, d)) return;
       editing = { y, m, d, person, slot };
       const cell = getCell(y, m, d, person);
 
@@ -3593,19 +3597,20 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
+      // Walk forward through staff (same day), then to next day's staff[0], skipping non-editable
       const personIdx = staff.indexOf(person);
-      if (personIdx < staff.length - 1) {
-        // Next person, same day
-        openEdit(y, m, d, staff[personIdx + 1]);
-      } else {
-        // Last person — jump to first person of next weekday (Fri/Sat → Mon)
-        const dow = new Date(y, m, d).getDay();
-        const skip = dow === 5 ? 3 : dow === 6 ? 2 : 1;
-        const next = new Date(y, m, d + skip);
-        const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
-        if (nm !== m || ny !== y) scrollToMonth(ny, nm);
-        else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
-        openEdit(ny, nm, nd, staff[0]);
+      for (let i = personIdx + 1; i < staff.length; i++) {
+        if (personEditableOnDate(staff[i], y, m, d)) { openEdit(y, m, d, staff[i]); return; }
+      }
+      // No editable person remaining on this day — advance to next weekday
+      const dow = new Date(y, m, d).getDay();
+      const skip = dow === 5 ? 3 : dow === 6 ? 2 : 1;
+      const next = new Date(y, m, d + skip);
+      const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
+      if (nm !== m || ny !== y) scrollToMonth(ny, nm);
+      else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
+      for (let i = 0; i < staff.length; i++) {
+        if (personEditableOnDate(staff[i], ny, nm, nd)) { openEdit(ny, nm, nd, staff[i]); return; }
       }
     }
 
