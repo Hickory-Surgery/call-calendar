@@ -1982,12 +1982,16 @@
             <button class="data-btn" id="signOutBtn">&#x2192; Sign out</button>
 
             <div style="margin-top:12px; border-top:1px solid #ECEFF1; padding-top:12px;">
-              <div style="font-size:0.78rem; font-weight:600; color:#546E7A; margin-bottom:8px; text-transform:uppercase; letter-spacing:0.04em;">Change Password</div>
-              <div style="display:flex;flex-direction:column;gap:7px;">
+              <button class="login-link" id="chgPassToggle" style="font-size:0.82rem">Change password →</button>
+              <div id="chgPassForm" style="display:none; margin-top:10px; display:none; flex-direction:column; gap:7px;">
+                <input type="password" id="chgPassCur"  class="login-input" placeholder="Current password"                autocomplete="current-password">
                 <input type="password" id="chgPassNew"  class="login-input" placeholder="New password (min 6 characters)" autocomplete="new-password">
                 <input type="password" id="chgPassConf" class="login-input" placeholder="Confirm new password"             autocomplete="new-password">
                 <div class="login-msg" id="chgPassMsg"></div>
-                <button class="data-btn" id="chgPassBtn">&#x2713; Update password</button>
+                <div style="display:flex;gap:8px;">
+                  <button class="data-btn" id="chgPassBtn">&#x2713; Update password</button>
+                  <button class="login-link" id="chgPassCancel" style="font-size:0.82rem">Cancel</button>
+                </div>
               </div>
             </div>
 
@@ -3686,11 +3690,7 @@
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
       document.getElementById('accountSignedIn').style.display = currentUser ? 'block' : 'none';
       if (!currentUser) showSV('sv-signin');
-      // Reset change-password form
-      document.getElementById('chgPassNew').value = '';
-      document.getElementById('chgPassConf').value = '';
-      const cpMsg = document.getElementById('chgPassMsg');
-      cpMsg.textContent = ''; cpMsg.className = 'login-msg';
+      resetChgPassForm();
       document.getElementById('signedInAs').textContent =
         currentUser ? `Signed in as ${currentUser.email}` : '';
       document.getElementById('settingsOverlay').classList.add('open');
@@ -3765,22 +3765,41 @@
       document.getElementById('settingsOverlay').classList.remove('open');
     });
 
+    function resetChgPassForm() {
+      ['chgPassCur','chgPassNew','chgPassConf'].forEach(id => document.getElementById(id).value = '');
+      const msg = document.getElementById('chgPassMsg'); msg.textContent = ''; msg.className = 'login-msg';
+      document.getElementById('chgPassForm').style.display = 'none';
+      document.getElementById('chgPassToggle').style.display = '';
+    }
+
+    document.getElementById('chgPassToggle').addEventListener('click', () => {
+      document.getElementById('chgPassForm').style.display = 'flex';
+      document.getElementById('chgPassToggle').style.display = 'none';
+      document.getElementById('chgPassCur').focus();
+    });
+
+    document.getElementById('chgPassCancel').addEventListener('click', resetChgPassForm);
+
     document.getElementById('chgPassBtn').addEventListener('click', async () => {
+      const cur  = document.getElementById('chgPassCur').value;
       const pass = document.getElementById('chgPassNew').value;
       const conf = document.getElementById('chgPassConf').value;
       const msg  = document.getElementById('chgPassMsg');
-      msg.className = 'login-msg';
-      if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+      msg.className = 'login-msg'; msg.textContent = '';
+      if (!cur)            { msg.textContent = 'Enter your current password.'; return; }
+      if (pass.length < 6) { msg.textContent = 'New password must be at least 6 characters.'; return; }
       if (pass !== conf)   { msg.textContent = 'Passwords do not match.'; return; }
+      // Verify current password before updating
+      const { error: authErr } = await sb.auth.signInWithPassword({ email: currentUser.email, password: cur });
+      if (authErr) { msg.textContent = 'Current password is incorrect.'; return; }
       const { error } = await sb.auth.updateUser({ password: pass });
       if (error) { msg.textContent = error.message; return; }
       msg.className = 'login-msg ok';
       msg.textContent = 'Password updated.';
-      document.getElementById('chgPassNew').value = '';
-      document.getElementById('chgPassConf').value = '';
+      setTimeout(resetChgPassForm, 1500);
     });
 
-    ['chgPassNew','chgPassConf'].forEach(id =>
+    ['chgPassCur','chgPassNew','chgPassConf'].forEach(id =>
       document.getElementById(id).addEventListener('keydown', e => {
         if (e.key === 'Enter') document.getElementById('chgPassBtn').click();
       }));
