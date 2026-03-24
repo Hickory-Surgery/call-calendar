@@ -4941,8 +4941,13 @@
       const cd = callDate();
       const dow = cd.getDay(); // 0=Sun, 6=Sat
 
-      // On call: first person with oncall set for today's slot
-      const callPerson = staff.find(p => isOnCall(getCell(ty, tm, td, p))) || '';
+      // On call: first person with oncall set for today's slot (slot depends on dow)
+      const callPerson = staff.find(p => {
+        const c = getCell(ty, tm, td, p);
+        if (dow === 6) return c.oncall_am !== 'none';
+        if (dow === 0) return c.oncall_pm !== 'none';
+        return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+      }) || '';
 
       // Backup and bari: use shared helpers so overrides are respected
       const backupPerson = backupPersonForDay(ty, tm, td, dow);
