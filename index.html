@@ -1748,7 +1748,7 @@
     <div class="topbar">
       <div class="month-nav">
         <button id="prevMonth" aria-label="Previous month" title="Previous month (Page Up)">&#8249;</button>
-        <span class="month-label" id="monthLabel"></span>
+        <span class="month-label" id="monthLabel" title="Home → current month"></span>
         <button id="nextMonth" aria-label="Next month" title="Next month (Page Down)">&#8250;</button>
       </div>
       <div class="day-summary" id="daySummary">
@@ -3477,6 +3477,9 @@
       if (e.key === 'PageUp' && !e.metaKey && !e.ctrlKey) {
         const { y, m } = prevMo(viewYear, viewMonth);
         e.preventDefault(); scrollToMonth(y, m); return;
+      }
+      if (e.key === 'Home' && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault(); scrollToMonth(today.getFullYear(), today.getMonth()); return;
       }
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); saveAndAdvance(); return; }
