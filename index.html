@@ -1032,9 +1032,45 @@
 
     .staff-item {
       display: flex;
+      flex-direction: column;
+      gap: 0;
+      cursor: default;
+    }
+
+    .staff-item-main {
+      display: flex;
       align-items: center;
       gap: 8px;
-      cursor: default;
+    }
+
+    .staff-item-dates {
+      display: flex;
+      gap: 14px;
+      padding-left: 28px;
+      margin-top: 5px;
+      margin-bottom: 2px;
+    }
+
+    .staff-date-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.75rem;
+      color: #607D8B;
+    }
+
+    .staff-date-label input[type="month"] {
+      padding: 3px 6px;
+      border: 1.5px solid #CFD8DC;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      color: #263238;
+      background: #fff;
+    }
+
+    .staff-date-label input[type="month"]:focus {
+      outline: none;
+      border-color: #37474F;
     }
 
     .staff-item.drag-over {
@@ -3110,6 +3146,22 @@
       // -55%: only headings in the top half of the viewport update the label
     }
 
+    // Returns false if the staff member has a start/stop date that excludes the given month.
+    // ry = full year, rm = 0-based month (JS convention).
+    function staffActiveInMonth(name, ry, rm) {
+      const row = staffByShortName[name];
+      if (!row) return true;
+      if (row.start_date) {
+        const [sy, sm] = row.start_date.split('-').map(Number);
+        if (ry < sy || (ry === sy && rm < sm - 1)) return false;
+      }
+      if (row.stop_date) {
+        const [ey, em] = row.stop_date.split('-').map(Number);
+        if (ry > ey || (ry === ey && rm > em - 1)) return false;
+      }
+      return true;
+    }
+
     function renderDayCell(date, ry, rm) {
       const d = date.getDate(), m = date.getMonth(), y = date.getFullYear();
       const inMonth = m === rm && y === ry;
@@ -3123,8 +3175,10 @@
       let html = `<div class="${cls}"><div class="cell-date">${dateInner}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
-        for (let i = 0; i < staff.length; i++)
+        for (let i = 0; i < staff.length; i++) {
+          if (!staffActiveInMonth(staff[i], ry, rm)) continue;
           html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1]);
+        }
       }
       return html + '</div>';
     }
@@ -3152,7 +3206,7 @@
         :                               `${sd} / ${ud}`;
       const wk = weekKey(sat);
 
-      const bariStaff = staff.filter(p => bariatric[p]);
+      const bariStaff = staff.filter(p => bariatric[p] && staffActiveInMonth(p, ry, rm));
       const selectedBari = bariCall[wk] || '';
       const bariOptions = `<option value=""></option>` +
         bariStaff.map(p => `<option value="${esc(p)}"${selectedBari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
@@ -3163,8 +3217,10 @@
       let html = `<div class="${cls}"><div class="cell-date"><span>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
-        for (let i = 0; i < staff.length; i++)
+        for (let i = 0; i < staff.length; i++) {
+          if (!staffActiveInMonth(staff[i], ry, rm)) continue;
           html += personRowHtml(y, m, d, staff[i], band !== null && i >= band[0] && i <= band[1], satIn, sunIn, true);
+        }
       }
       return html + '</div>';
     }
@@ -3947,17 +4003,25 @@
             ${subBtn}
           </div>`;
         }
+        const startVal = row?.start_date ? row.start_date.slice(0, 7) : '';
+        const stopVal  = row?.stop_date  ? row.stop_date.slice(0, 7)  : '';
         return `
         <div class="staff-item" draggable="true" data-idx="${i}" data-id="${row ? row.id : ''}">
-          <span class="drag-handle">&#8942;</span>
-          <input type="text" class="staff-short" value="${esc(name)}" placeholder="Short">
-          <input type="text" class="staff-full" value="${esc(fullnames[name] || '')}" placeholder="Full name">
-          <label class="bariatric-label">
-            <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
-            Bari
-          </label>
-          ${subBtn}
-          <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
+          <div class="staff-item-main">
+            <span class="drag-handle">&#8942;</span>
+            <input type="text" class="staff-short" value="${esc(name)}" placeholder="Short">
+            <input type="text" class="staff-full" value="${esc(fullnames[name] || '')}" placeholder="Full name">
+            <label class="bariatric-label">
+              <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
+              Bari
+            </label>
+            ${subBtn}
+            <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
+          </div>
+          <div class="staff-item-dates">
+            <label class="staff-date-label">From <input type="month" class="staff-start" value="${startVal}" title="First month to show this person"></label>
+            <label class="staff-date-label">To <input type="month" class="staff-stop" value="${stopVal}" title="Last month to show this person"></label>
+          </div>
         </div>`;
       }).join('');
 
@@ -4047,6 +4111,10 @@
         const short = item.querySelector('.staff-short').value.trim();
         const full = item.querySelector('.staff-full').value.trim();
         const isBari = item.querySelector('.bari-check').checked;
+        const startVal = item.querySelector('.staff-start')?.value;
+        const stopVal  = item.querySelector('.staff-stop')?.value;
+        const start_date = startVal ? startVal + '-01' : null;
+        const stop_date  = stopVal  ? stopVal  + '-01' : null;
         if (!short) continue;
 
         if (id) {
@@ -4056,6 +4124,8 @@
             display_name: full || short,
             is_bariatric: isBari,
             sort_order: i,
+            start_date,
+            stop_date,
           }).eq('id', id);
           if (error) { showToast('Staff save failed — please try again.'); return; }
         } else {
@@ -4065,6 +4135,8 @@
             is_bariatric: isBari,
             sort_order: i,
             active: true,
+            start_date,
+            stop_date,
           }).select('id').single();
           if (error) { showToast('Staff save failed — please try again.'); return; }
           if (inserted) item.dataset.id = inserted.id;
