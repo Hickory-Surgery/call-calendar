@@ -637,6 +637,39 @@
       cursor: pointer;
     }
     .btn-google:hover { background: #F5F5F5; }
+    .lv { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; }
+    .login-divider {
+      display: flex; align-items: center; gap: 8px;
+      width: 100%; font-size: 0.75rem; color: #B0BEC5;
+    }
+    .login-divider::before, .login-divider::after {
+      content: ''; flex: 1; height: 1px; background: #ECEFF1;
+    }
+    .login-input {
+      width: 100%; box-sizing: border-box;
+      border: 1px solid #D0D7DE; border-radius: 6px;
+      padding: 9px 12px; font-size: 0.88rem; color: #37474F;
+      outline: none; font-family: var(--font);
+    }
+    .login-input:focus { border-color: #1565C0; box-shadow: 0 0 0 2px rgba(21,101,192,0.15); }
+    .login-msg { font-size: 0.78rem; min-height: 1em; text-align: center; color: #C62828; }
+    .login-msg.ok { color: #2E7D32; }
+    .btn-email-action {
+      width: 100%; background: #1565C0; color: white;
+      border: none; border-radius: 6px; padding: 10px 20px;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      font-family: var(--font);
+    }
+    .btn-email-action:hover { background: #1976D2; }
+    .login-links { display: flex; justify-content: space-between; width: 100%; }
+    .login-link {
+      background: none; border: none; padding: 0;
+      font-size: 0.78rem; color: #1565C0; cursor: pointer;
+      text-decoration: underline; font-family: var(--font);
+    }
+    @media (max-width: 480px) {
+      .login-card { padding: 28px 20px; width: calc(100vw - 40px); }
+    }
     #loginScreen.checking .login-card { display: none; }
     #loginScreen.checking::after {
       content: '';
@@ -1649,12 +1682,56 @@
   <!-- Login screen -->
   <div id="loginScreen" class="checking">
     <div class="login-card">
-      <div class="login-title">Call Calendar</div>
-      <div class="login-sub">Sign in to view the schedule</div>
-      <button class="btn-google" id="btnGoogleSignIn">
-        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-        Sign in with Google
-      </button>
+
+      <!-- View: sign in -->
+      <div class="lv" id="lv-signin">
+        <div class="login-title">Call Calendar</div>
+        <div class="login-sub">Sign in to view the schedule</div>
+        <button class="btn-google" id="btnGoogleSignIn">
+          <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.31-8.16 2.31-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+          Sign in with Google
+        </button>
+        <div class="login-divider">or</div>
+        <input type="email"    id="li-email" class="login-input" placeholder="Email address" autocomplete="email">
+        <input type="password" id="li-pass"  class="login-input" placeholder="Password"      autocomplete="current-password">
+        <div class="login-msg" id="li-msg"></div>
+        <button class="btn-email-action" id="btnSignIn">Sign in</button>
+        <div class="login-links">
+          <button class="login-link" id="btnToForgot">Forgot password?</button>
+          <button class="login-link" id="btnToSignUp">New user? Sign up</button>
+        </div>
+      </div>
+
+      <!-- View: create account -->
+      <div class="lv" id="lv-signup" style="display:none">
+        <div class="login-title">Create Account</div>
+        <div class="login-sub">An admin will approve your access after you sign up.</div>
+        <input type="email"    id="su-email" class="login-input" placeholder="Email address"               autocomplete="email">
+        <input type="password" id="su-pass"  class="login-input" placeholder="Password (min 6 characters)" autocomplete="new-password">
+        <div class="login-msg" id="su-msg"></div>
+        <button class="btn-email-action" id="btnSignUp">Create account</button>
+        <button class="login-link" id="btnToSignIn">← Back to sign in</button>
+      </div>
+
+      <!-- View: forgot password -->
+      <div class="lv" id="lv-forgot" style="display:none">
+        <div class="login-title">Reset Password</div>
+        <div class="login-sub">Enter your email to receive a reset link.</div>
+        <input type="email" id="fp-email" class="login-input" placeholder="Email address" autocomplete="email">
+        <div class="login-msg" id="fp-msg"></div>
+        <button class="btn-email-action" id="btnSendReset">Send reset link</button>
+        <button class="login-link" id="btnForgotToSignIn">← Back to sign in</button>
+      </div>
+
+      <!-- View: set new password (after clicking reset link in email) -->
+      <div class="lv" id="lv-newpass" style="display:none">
+        <div class="login-title">Set New Password</div>
+        <div class="login-sub">Enter your new password below.</div>
+        <input type="password" id="np-pass" class="login-input" placeholder="New password (min 6 characters)" autocomplete="new-password">
+        <div class="login-msg" id="np-msg"></div>
+        <button class="btn-email-action" id="btnSetPass">Set password &amp; sign in</button>
+      </div>
+
     </div>
   </div>
 
@@ -1812,11 +1889,46 @@
         <div class="tab-panel" id="tab-account">
           <!-- Public (not signed in) -->
           <div id="accountPublic">
-            <p style="font-size:0.82rem;color:#607D8B;margin-bottom:12px">Sign in for edit access and personalised settings.</p>
-            <button class="btn-google" id="btnGoogleSignInSettings">
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="">
-              Sign in with Google
-            </button>
+            <p style="font-size:0.82rem;color:#607D8B;margin-bottom:4px">Sign in for edit access and personalised settings.</p>
+
+            <!-- View: sign in -->
+            <div class="lv" id="sv-signin" style="gap:10px">
+              <button class="btn-google" id="btnGoogleSignInSettings">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="">
+                Sign in with Google
+              </button>
+              <div class="login-divider">or</div>
+              <input type="email"    id="si-email" class="login-input" placeholder="Email address" autocomplete="email">
+              <input type="password" id="si-pass"  class="login-input" placeholder="Password"      autocomplete="current-password">
+              <div class="login-msg" id="si-msg"></div>
+              <button class="btn-email-action" id="sBtnSignIn">Sign in</button>
+              <div class="login-links">
+                <button class="login-link" id="sBtnToForgot">Forgot password?</button>
+                <button class="login-link" id="sBtnToSignUp">New user? Sign up</button>
+              </div>
+            </div>
+
+            <!-- View: create account -->
+            <div class="lv" id="sv-signup" style="display:none;gap:10px">
+              <div style="font-size:0.85rem;font-weight:600;color:#37474F">Create Account</div>
+              <div style="font-size:0.78rem;color:#607D8B;text-align:center">An admin will approve your access after you sign up.</div>
+              <input type="email"    id="si2-email" class="login-input" placeholder="Email address"               autocomplete="email">
+              <input type="password" id="si2-pass"  class="login-input" placeholder="Password (min 6 characters)" autocomplete="new-password">
+              <div class="login-msg" id="si2-msg"></div>
+              <button class="btn-email-action" id="sBtnSignUp">Create account</button>
+              <button class="login-link" id="sBtnToSignIn">← Back to sign in</button>
+            </div>
+
+            <!-- View: forgot password -->
+            <div class="lv" id="sv-forgot" style="display:none;gap:10px">
+              <div style="font-size:0.85rem;font-weight:600;color:#37474F">Reset Password</div>
+              <div style="font-size:0.78rem;color:#607D8B;text-align:center">Enter your email to receive a reset link.</div>
+              <input type="email" id="sf-email" class="login-input" placeholder="Email address" autocomplete="email">
+              <div class="login-msg" id="sf-msg"></div>
+              <button class="btn-email-action" id="sBtnSendReset">Send reset link</button>
+              <button class="login-link" id="sBtnForgotToSignIn">← Back to sign in</button>
+            </div>
+
           </div>
           <!-- Signed in -->
           <div id="accountSignedIn">
@@ -1878,11 +1990,96 @@
 
     const loginScreen = document.getElementById('loginScreen');
 
+    // ── Login screen view helpers ──────────────────────────────────
+    function showLV(id) {
+      ['lv-signin','lv-signup','lv-forgot','lv-newpass'].forEach(v =>
+        document.getElementById(v).style.display = v === id ? '' : 'none');
+      ['li-msg','su-msg','fp-msg','np-msg'].forEach(mid => {
+        const el = document.getElementById(mid); el.textContent = ''; el.className = 'login-msg';
+      });
+    }
+    function showSV(id) {
+      ['sv-signin','sv-signup','sv-forgot'].forEach(v =>
+        document.getElementById(v).style.display = v === id ? '' : 'none');
+      ['si-msg','si2-msg','sf-msg'].forEach(mid => {
+        const el = document.getElementById(mid); el.textContent = ''; el.className = 'login-msg';
+      });
+    }
+
+    // ── Main login screen ──────────────────────────────────────────
     document.getElementById('btnGoogleSignIn').addEventListener('click', () => {
       sb.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin + window.location.pathname }
       });
+    });
+
+    document.getElementById('btnToSignUp').addEventListener('click',       () => showLV('lv-signup'));
+    document.getElementById('btnToSignIn').addEventListener('click',       () => showLV('lv-signin'));
+    document.getElementById('btnToForgot').addEventListener('click',       () => showLV('lv-forgot'));
+    document.getElementById('btnForgotToSignIn').addEventListener('click', () => showLV('lv-signin'));
+
+    document.getElementById('btnSignIn').addEventListener('click', async () => {
+      const email = document.getElementById('li-email').value.trim();
+      const pass  = document.getElementById('li-pass').value;
+      const msg   = document.getElementById('li-msg');
+      if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+      if (error) msg.textContent = error.message;
+    });
+
+    document.getElementById('btnSignUp').addEventListener('click', async () => {
+      const email = document.getElementById('su-email').value.trim();
+      const pass  = document.getElementById('su-pass').value;
+      const msg   = document.getElementById('su-msg');
+      if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+      const { data, error } = await sb.auth.signUp({ email, password: pass });
+      if (error) { msg.textContent = error.message; return; }
+      if (!data.session) {
+        msg.className = 'login-msg ok';
+        msg.textContent = 'Check your email to confirm your account, then sign in.';
+      }
+      // If data.session exists, onAuthStateChange handles the rest
+    });
+
+    document.getElementById('btnSendReset').addEventListener('click', async () => {
+      const email = document.getElementById('fp-email').value.trim();
+      const msg   = document.getElementById('fp-msg');
+      if (!email) { msg.textContent = 'Enter your email address.'; return; }
+      const { error } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) { msg.textContent = error.message; return; }
+      msg.className = 'login-msg ok';
+      msg.textContent = 'Reset link sent — check your email.';
+    });
+
+    document.getElementById('btnSetPass').addEventListener('click', async () => {
+      const pass = document.getElementById('np-pass').value;
+      const msg  = document.getElementById('np-msg');
+      if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+      const { error } = await sb.auth.updateUser({ password: pass });
+      if (error) { msg.textContent = error.message; return; }
+      showToast('Password updated — signing you in.');
+      const { data: { session } } = await sb.auth.getSession();
+      if (session) applySession(session);
+    });
+
+    // Enter-key shortcuts for login screen inputs
+    ['li-email','li-pass'].forEach(id =>
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('btnSignIn').click();
+      }));
+    ['su-email','su-pass'].forEach(id =>
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('btnSignUp').click();
+      }));
+    document.getElementById('fp-email').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnSendReset').click();
+    });
+    document.getElementById('np-pass').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('btnSetPass').click();
     });
 
     async function fetchRole(userId) {
@@ -1963,6 +2160,13 @@
 
     // Handle sign-in and sign-out during the session
     sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        // User clicked reset link — show set-new-password form
+        loginScreen.classList.remove('hidden');
+        loginScreen.classList.remove('checking');
+        showLV('lv-newpass');
+        return;
+      }
       if (session?.user) {
         applySession(session);
       } else if (event === 'SIGNED_OUT') {
@@ -3364,6 +3568,7 @@
       }
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
       document.getElementById('accountSignedIn').style.display = currentUser ? 'block' : 'none';
+      if (!currentUser) showSV('sv-signin');
       document.getElementById('signedInAs').textContent =
         currentUser ? `Signed in as ${currentUser.email}` : '';
       document.getElementById('settingsOverlay').classList.add('open');
@@ -3378,6 +3583,59 @@
         provider: 'google',
         options: { redirectTo: window.location.origin + window.location.pathname }
       });
+    });
+
+    document.getElementById('sBtnToSignUp').addEventListener('click',       () => showSV('sv-signup'));
+    document.getElementById('sBtnToSignIn').addEventListener('click',       () => showSV('sv-signin'));
+    document.getElementById('sBtnToForgot').addEventListener('click',       () => showSV('sv-forgot'));
+    document.getElementById('sBtnForgotToSignIn').addEventListener('click', () => showSV('sv-signin'));
+
+    document.getElementById('sBtnSignIn').addEventListener('click', async () => {
+      const email = document.getElementById('si-email').value.trim();
+      const pass  = document.getElementById('si-pass').value;
+      const msg   = document.getElementById('si-msg');
+      if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+      if (error) msg.textContent = error.message;
+    });
+
+    document.getElementById('sBtnSignUp').addEventListener('click', async () => {
+      const email = document.getElementById('si2-email').value.trim();
+      const pass  = document.getElementById('si2-pass').value;
+      const msg   = document.getElementById('si2-msg');
+      if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
+      const { data, error } = await sb.auth.signUp({ email, password: pass });
+      if (error) { msg.textContent = error.message; return; }
+      if (!data.session) {
+        msg.className = 'login-msg ok';
+        msg.textContent = 'Check your email to confirm your account, then sign in.';
+      }
+    });
+
+    document.getElementById('sBtnSendReset').addEventListener('click', async () => {
+      const email = document.getElementById('sf-email').value.trim();
+      const msg   = document.getElementById('sf-msg');
+      if (!email) { msg.textContent = 'Enter your email address.'; return; }
+      const { error } = await sb.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin + window.location.pathname
+      });
+      if (error) { msg.textContent = error.message; return; }
+      msg.className = 'login-msg ok';
+      msg.textContent = 'Reset link sent — check your email.';
+    });
+
+    // Enter-key shortcuts for settings auth inputs
+    ['si-email','si-pass'].forEach(id =>
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('sBtnSignIn').click();
+      }));
+    ['si2-email','si2-pass'].forEach(id =>
+      document.getElementById(id).addEventListener('keydown', e => {
+        if (e.key === 'Enter') document.getElementById('sBtnSignUp').click();
+      }));
+    document.getElementById('sf-email').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('sBtnSendReset').click();
     });
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
