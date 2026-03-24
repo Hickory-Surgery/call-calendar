@@ -3619,19 +3619,20 @@
       if (doSave() === false) return;
       const { y, m, d, person } = editing;
       reRenderMonth(y, m);
+      // Walk backward through staff (same day), then to prev day's last editable, skipping non-editable
       const personIdx = staff.indexOf(person);
-      if (personIdx > 0) {
-        // Previous person, same day
-        openEdit(y, m, d, staff[personIdx - 1]);
-      } else {
-        // First person — jump to last person of previous weekday (Mon → Fri skipping weekend)
-        const dow = new Date(y, m, d).getDay();
-        const skip = dow === 1 ? 3 : dow === 0 ? 2 : 1;
-        const prev = new Date(y, m, d - skip);
-        const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
-        if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
-        else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
-        openEdit(py, pm2, pd, staff[staff.length - 1]);
+      for (let i = personIdx - 1; i >= 0; i--) {
+        if (personEditableOnDate(staff[i], y, m, d)) { openEdit(y, m, d, staff[i]); return; }
+      }
+      // No editable person before this one on this day — retreat to previous weekday
+      const dow = new Date(y, m, d).getDay();
+      const skip = dow === 1 ? 3 : dow === 0 ? 2 : 1;
+      const prev = new Date(y, m, d - skip);
+      const py = prev.getFullYear(), pm2 = prev.getMonth(), pd = prev.getDate();
+      if (pm2 !== m || py !== y) scrollToMonth(py, pm2);
+      else if (!document.getElementById(`month-${py}-${pm2}`)) appendNextMonth();
+      for (let i = staff.length - 1; i >= 0; i--) {
+        if (personEditableOnDate(staff[i], py, pm2, pd)) { openEdit(py, pm2, pd, staff[i]); return; }
       }
     }
 
