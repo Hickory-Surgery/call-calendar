@@ -4327,7 +4327,7 @@
         logo_url:                document.getElementById('ci-logo-url').value.trim() || null,
         updated_at:              new Date().toISOString(),
       };
-      const { error } = await sb.from('company_info').upsert(payload);
+      const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
       showToast('Practice info saved.');
     });
