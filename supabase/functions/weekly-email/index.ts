@@ -157,8 +157,10 @@ Deno.serve(async (req) => {
     }
 
     // Day call: exception (green pill) person if present, otherwise HOSP person
+    // Exception person also serves as backup
     const exceptionPerson = staffOrder.find(p => getCell(dataIso, p).exception) ?? ''
     const dayCallPerson = exceptionPerson || backupPerson
+    if (exceptionPerson) backupPerson = exceptionPerson
 
     // Bariatric: call person if bari+, else backup if bari+, else dropdown
     const bariPerson = bariatric[callPerson] ? callPerson
