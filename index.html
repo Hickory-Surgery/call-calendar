@@ -3594,10 +3594,11 @@
       const ny = next.getFullYear(), nm = next.getMonth(), nd = next.getDate();
       if (nm !== m || ny !== y) scrollToMonth(ny, nm);
       else if (!document.getElementById(`month-${ny}-${nm}`)) appendNextMonth();
-      if (personEditableOnDate(person, ny, nm, nd)) {
+      if (dow !== 6 && personEditableOnDate(person, ny, nm, nd)) {
+        // Weekend is always a row boundary — fall through to next-person logic
         openEdit(ny, nm, nd, person);
       } else {
-        // Blank cell — drop to next person on the Monday of this same week
+        // Blank cell or end of weekend — drop to next person on the Monday of this same week
         const dow2 = new Date(ny, nm, nd).getDay();
         const monOffset = dow2 === 0 ? -6 : 1 - dow2;
         const mon = new Date(ny, nm, nd + monOffset);
