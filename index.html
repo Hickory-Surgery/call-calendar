@@ -244,36 +244,6 @@
       gap: 4px;
     }
 
-    .wk-selects {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-      flex-shrink: 0;
-    }
-
-    .backup-select {
-      font-size: 0.6rem;
-      font-weight: 600;
-      color: #37474F;
-      background: rgba(255, 255, 255, 0.55);
-      border: 1px solid rgba(0, 0, 0, 0.15);
-      border-radius: 3px;
-      padding: 1px 2px;
-      cursor: pointer;
-      max-width: 52px;
-      width: 52px;
-    }
-
-    .backup-select:focus {
-      outline: none;
-      border-color: #1565C0;
-    }
-
-    .bari-call-select {
-      background: #CFD8DC;
-      border-color: rgba(0, 0, 0, 0.12);
-      color: #37474F;
-    }
 
     /* ── Topbar: wrap to two rows on narrow screens ── */
     @media (max-width: 540px) {
@@ -370,11 +340,6 @@
       color: white;
     }
 
-    .today .cell-date .backup-select {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.3);
-      color: white;
-    }
 
     .out-of-month .cell-date {
       color: #AABBCC;
@@ -2957,35 +2922,11 @@
       grid.innerHTML = buildMonthHTML(y, m);
       grid.onclick = e => {
         if (!canEdit()) return;
-        if (e.target.closest('.backup-select')) return;
         const row = e.target.closest('[data-person]');
         if (!row) return;
         const slotEl = e.target.closest('[data-slot]');
         openEdit(+row.dataset.y, +row.dataset.m, +row.dataset.d, row.dataset.person, slotEl ? slotEl.dataset.slot : null);
       };
-      grid.addEventListener('change', e => {
-        const sel = e.target.closest('.bari-call-select');
-        if (!sel) return;
-        const wk = sel.dataset.wk;
-        const prev = bariCall[wk];
-        if (sel.value) bariCall[wk] = sel.value; else delete bariCall[wk];
-        updateDaySummary();
-        const weekStart = isoFromWeekKey(wk);
-        const staffRow = sel.value ? staffByShortName[sel.value] : null;
-        (async () => {
-          let error;
-          if (staffRow) {
-            ({ error } = await sb.from('bari_call').upsert({ week_start: weekStart, person_id: staffRow.id }));
-          } else {
-            ({ error } = await sb.from('bari_call').delete().eq('week_start', weekStart));
-          }
-          if (error) {
-            if (prev !== undefined) bariCall[wk] = prev; else delete bariCall[wk];
-            updateDaySummary();
-            showToast('Save failed — please try again.');
-          }
-        })();
-      });
       setupGridDrag(grid);
       sec.appendChild(grid);
 
@@ -3347,14 +3288,6 @@
         :                               `${sd} / ${ud}`;
       const wk = weekKey(sat);
 
-      const bariStaff = staff.filter(p => bariatric[p] && staffActiveInMonth(p, ry, rm));
-      const selectedBari = bariCall[wk] || '';
-      const bariOptions = `<option value=""></option>` +
-        bariStaff.map(p => `<option value="${esc(p)}"${selectedBari === p ? ' selected' : ''}>${esc(shortName(p))}</option>`).join('');
-      const bariSelect = inMonth && bariStaff.length
-        ? `<select class="backup-select bari-call-select" data-wk="${esc(wk)}" title="Bariatric call"${canEdit() ? '' : ' disabled'}>${bariOptions}</select>`
-        : '';
-
       // Use worst-case warning across both Saturday and Sunday
       const satWarn = inMonth ? dayCoverageClass(y, m, d, 6) : '';
       const sunWarn = inMonth ? dayCoverageClass(y, m, d, 0) : '';
@@ -3371,7 +3304,7 @@
       })() : '';
       const weEditAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}" data-cov-weekend="1"` : '';
       const weTitleAttr = weOvTitle ? ` title="${esc(weOvTitle)}"` : '';
-      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}${weTitleAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
+      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}${weTitleAttr}>${dateStr}</span></div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
