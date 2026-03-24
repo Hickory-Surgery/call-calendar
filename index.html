@@ -1051,6 +1051,18 @@
       margin-bottom: 2px;
     }
 
+    .staff-dates-toggle {
+      font-size: 0.72rem;
+      color: #90A4AE;
+      cursor: pointer;
+      padding: 0 2px;
+      user-select: none;
+      flex-shrink: 0;
+      line-height: 1;
+    }
+
+    .staff-dates-toggle:hover { color: #455A64; }
+
     .staff-date-label {
       display: flex;
       align-items: center;
@@ -4016,14 +4028,26 @@
               Bari
             </label>
             ${subBtn}
+            <span class="staff-dates-toggle" title="Set start/stop dates" style="color:${startVal || stopVal ? '#1565C0' : ''}">&#8943;</span>
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
-          <div class="staff-item-dates">
+          <div class="staff-item-dates" style="display:${startVal || stopVal ? '' : 'none'}">
             <label class="staff-date-label">From <input type="date" class="staff-start" value="${startVal}" title="Start date (shown starting this month)"></label>
             <label class="staff-date-label">To <input type="date" class="staff-stop" value="${stopVal}" title="Stop date (hidden the month after)"></label>
           </div>
         </div>`;
       }).join('');
+
+      // Start/stop date reveal toggles
+      list.querySelectorAll('.staff-dates-toggle').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const dates = btn.closest('.staff-item').querySelector('.staff-item-dates');
+          const open = dates.style.display !== 'none';
+          dates.style.display = open ? 'none' : '';
+          btn.textContent = open ? '⋯' : '⋯';
+          btn.style.color = open ? '' : '#1565C0';
+        });
+      });
 
       // Bariatric checkbox toggles
       list.querySelectorAll('.bari-check').forEach(cb => {
