@@ -1059,7 +1059,7 @@
       color: #607D8B;
     }
 
-    .staff-date-label input[type="month"] {
+    .staff-date-label input[type="date"] {
       padding: 3px 6px;
       border: 1.5px solid #CFD8DC;
       border-radius: 6px;
@@ -1068,7 +1068,7 @@
       background: #fff;
     }
 
-    .staff-date-label input[type="month"]:focus {
+    .staff-date-label input[type="date"]:focus {
       outline: none;
       border-color: #37474F;
     }
@@ -4003,8 +4003,8 @@
             ${subBtn}
           </div>`;
         }
-        const startVal = row?.start_date ? row.start_date.slice(0, 7) : '';
-        const stopVal  = row?.stop_date  ? row.stop_date.slice(0, 7)  : '';
+        const startVal = row?.start_date ? row.start_date.slice(0, 10) : '';
+        const stopVal  = row?.stop_date  ? row.stop_date.slice(0, 10)  : '';
         return `
         <div class="staff-item" draggable="true" data-idx="${i}" data-id="${row ? row.id : ''}">
           <div class="staff-item-main">
@@ -4019,8 +4019,8 @@
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
           <div class="staff-item-dates">
-            <label class="staff-date-label">From <input type="month" class="staff-start" value="${startVal}" title="First month to show this person"></label>
-            <label class="staff-date-label">To <input type="month" class="staff-stop" value="${stopVal}" title="Last month to show this person"></label>
+            <label class="staff-date-label">From <input type="date" class="staff-start" value="${startVal}" title="Start date (shown starting this month)"></label>
+            <label class="staff-date-label">To <input type="date" class="staff-stop" value="${stopVal}" title="Stop date (hidden the month after)"></label>
           </div>
         </div>`;
       }).join('');
@@ -4113,8 +4113,8 @@
         const isBari = item.querySelector('.bari-check').checked;
         const startVal = item.querySelector('.staff-start')?.value;
         const stopVal  = item.querySelector('.staff-stop')?.value;
-        const start_date = startVal ? startVal + '-01' : null;
-        const stop_date  = stopVal  ? stopVal  + '-01' : null;
+        const start_date = startVal || null;
+        const stop_date  = stopVal  || null;
         if (!short) continue;
 
         if (id) {
