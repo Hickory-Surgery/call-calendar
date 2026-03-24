@@ -304,7 +304,8 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       from: 'Call Calendar <noreply@ssrounds.com>',
-      to: recipientEmails,
+      to: 'noreply@ssrounds.com',
+      bcc: recipientEmails,
       subject: `Call Schedule — ${weekLabel}`,
       html,
       text,
