@@ -1939,7 +1939,8 @@
           </div>
 
           <div class="rates-section admin-only" id="ratesSection">
-            <div class="rates-section-title">Call Rates</div>
+            <button class="login-link" id="ratesToggle" style="font-size:0.82rem">Call rates ›</button>
+            <div id="ratesBody" style="display:none">
             <div class="rates-grid">
               <div></div>
               <div class="rates-col-hdr">Weekday</div>
@@ -1952,6 +1953,7 @@
               <input type="number" id="rateCmvcWe" class="rates-input" step="0.01" min="0" placeholder="0.00">
             </div>
             <button class="data-btn" id="saveRatesBtn">&#x2713; Save rates</button>
+            </div>
           </div>
 
         </div>
@@ -3842,6 +3844,13 @@
       viewAsRole = null;
       syncRolePreviewBanner();
       render();
+    });
+
+    document.getElementById('ratesToggle').addEventListener('click', () => {
+      const body = document.getElementById('ratesBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('ratesToggle').textContent = open ? 'Call rates ›' : 'Call rates ↓';
     });
 
     document.getElementById('saveRatesBtn').addEventListener('click', async () => {
