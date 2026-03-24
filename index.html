@@ -3599,9 +3599,9 @@
         openEdit(ny, nm, nd, person);
       } else {
         // Blank cell or end of weekend — drop to next person on the Monday of this same week
-        const dow2 = new Date(ny, nm, nd).getDay();
-        const monOffset = dow2 === 0 ? -6 : 1 - dow2;
-        const mon = new Date(ny, nm, nd + monOffset);
+        // Use the editing cell (y,m,d) as the week anchor, not the computed next cell
+        const monOffset = dow === 0 ? -6 : 1 - dow;
+        const mon = new Date(y, m, d + monOffset);
         const my = mon.getFullYear(), mm2 = mon.getMonth(), md = mon.getDate();
         if (mm2 !== m || my !== y) scrollToMonth(my, mm2);
         else if (!document.getElementById(`month-${my}-${mm2}`)) appendNextMonth();
