@@ -2149,15 +2149,25 @@
       return data ? data.role : null;
     }
 
-    function loadPublic() {
+    async function loadPublic() {
       currentUser = null;
       currentRole = 'viewer';
       sessionApplied = false;
       if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-      document.getElementById('settingsOverlay').classList.remove('open');
-      loginScreen.classList.remove('checking');
-      loginScreen.classList.remove('hidden');
-      showLV('lv-signin');
+      await fetchStaff();
+      await Promise.all([fetchAssignments(), fetchBariCall()]);
+      setupRealtimeSubscriptions();
+      render();
+      updateDaySummary();
+      loginScreen.classList.add('hidden');
+      const savedPos = (() => {
+        try {
+          const p = JSON.parse(localStorage.getItem('viewPos'));
+          if (p && Date.now() - p.at < 8 * 60 * 60 * 1000) return p;
+        } catch {}
+        return null;
+      })();
+      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
     }
 
     async function applySession(session) {
@@ -3755,6 +3765,7 @@
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
       await sb.auth.signOut();
+      document.getElementById('settingsOverlay').classList.remove('open');
     });
 
     function resetChgPassForm() {
