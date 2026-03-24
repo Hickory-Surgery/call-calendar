@@ -2634,6 +2634,8 @@
       if (matches(y + 1, 0, 1)) return true;
 
       // Floating holidays (always weekdays by definition)
+      // MLK Day: 3rd Monday of January
+      if (m === 0  && dow === 1 && d >= 15 && d <= 21) return true;
       // Memorial Day: last Monday of May
       if (m === 4  && dow === 1 && new Date(y, m, d + 7).getMonth() !== m) return true;
       // Labor Day: first Monday of September
