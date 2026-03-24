@@ -2149,25 +2149,15 @@
       return data ? data.role : null;
     }
 
-    async function loadPublic() {
+    function loadPublic() {
       currentUser = null;
       currentRole = 'viewer';
       sessionApplied = false;
       if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
-      await fetchStaff();
-      await Promise.all([fetchAssignments(), fetchBariCall()]);
-      setupRealtimeSubscriptions();
-      render();
-      updateDaySummary();
-      loginScreen.classList.add('hidden');
-      const savedPos = (() => {
-        try {
-          const p = JSON.parse(localStorage.getItem('viewPos'));
-          if (p && Date.now() - p.at < 8 * 60 * 60 * 1000) return p;
-        } catch {}
-        return null;
-      })();
-      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
+      document.getElementById('settingsOverlay').classList.remove('open');
+      loginScreen.classList.remove('checking');
+      loginScreen.classList.remove('hidden');
+      showLV('lv-signin');
     }
 
     async function applySession(session) {
@@ -2201,6 +2191,9 @@
       render();
       updateDaySummary();
       loginScreen.classList.add('hidden');
+      if (document.getElementById('settingsOverlay').classList.contains('open')) {
+        openSettings(); // refresh settings UI to reflect newly signed-in role
+      }
       const savedPos = (() => {
         try {
           const p = JSON.parse(localStorage.getItem('viewPos'));
@@ -3762,7 +3755,6 @@
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
       await sb.auth.signOut();
-      document.getElementById('settingsOverlay').classList.remove('open');
     });
 
     function resetChgPassForm() {
