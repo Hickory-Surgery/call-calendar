@@ -54,6 +54,9 @@ Deno.serve(async (req) => {
   // days[0]=Mon … days[5]=Sat, days[6]=Sun
   const saturday = days[5]
 
+  // ── Fetch company info ────────────────────────────────────────────────────
+  const { data: co } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle()
+
   // ── Fetch staff ───────────────────────────────────────────────────────────
   const { data: staffRows, error: staffErr } = await sb
     .from('staff')
@@ -226,8 +229,24 @@ Deno.serve(async (req) => {
     </tr>`
   }).join('\n')
 
+  // Company header block (only rendered when data is present)
+  const logoHtml = co?.logo_url
+    ? `<img src="${co.logo_url}" alt="${co?.name ?? ''}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;margin-bottom:8px">`
+    : ''
+  const practiceHtml = co?.name
+    ? `<div style="margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #ECEFF1">
+        ${logoHtml}
+        <div style="font-size:1rem;font-weight:700;color:#37474F">${co.name}</div>
+        ${co?.address  ? `<div style="font-size:0.8rem;color:#607D8B;white-space:pre-line">${co.address}</div>` : ''}
+        <div style="font-size:0.8rem;color:#607D8B;margin-top:4px">
+          ${co?.phone ? `Phone: ${co.phone}` : ''}${co?.phone && co?.fax ? '&ensp;·&ensp;' : ''}${co?.fax ? `Fax: ${co.fax}` : ''}
+        </div>
+      </div>`
+    : ''
+
   const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
+  ${practiceHtml}
   <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">Call Schedule</h2>
   <p style="font-size:0.9rem;color:#607D8B;margin-top:0;margin-bottom:20px">${weekLabel}</p>
   <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
@@ -244,6 +263,8 @@ Deno.serve(async (req) => {
   </table>
   <p style="font-size:0.75rem;color:#90A4AE;margin-top:20px">
     <a href="https://hickory-surgery.github.io/call-calendar/" style="color:#1565C0">View full calendar</a>
+    ${co?.office_manager ? `&ensp;·&ensp;Office Mgr: ${co.office_manager}` : ''}
+    ${co?.scheduling_coordinator ? `&ensp;·&ensp;Scheduling: ${co.scheduling_coordinator}` : ''}
   </p>
 </body></html>`
 

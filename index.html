@@ -215,6 +215,11 @@
 
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
+    .ci-form { display:flex; flex-direction:column; gap:8px; }
+    .ci-label { display:flex; flex-direction:column; gap:3px; font-size:0.75rem; font-weight:600; color:#607D8B; text-transform:uppercase; letter-spacing:0.04em; }
+    .ci-input { font-size:0.85rem; font-family:var(--font); color:#37474F; border:1px solid #CFD8DC; border-radius:5px; padding:6px 8px; outline:none; resize:vertical; }
+    .ci-input:focus { border-color:#1565C0; }
+    .ci-textarea { min-height:52px; }
     .cov-section-label { font-size:0.8rem; font-weight:700; color:#1565C0; letter-spacing:0.04em; text-transform:uppercase; padding:10px 0 4px; }
     .cov-section-label:first-child { padding-top:0; }
     .cov-grid { width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:4px; }
@@ -1941,6 +1946,7 @@
       <div class="sheet-tabs" id="settingsTabs">
         <button class="tab-btn" data-tab="users">Users</button>
         <button class="tab-btn" data-tab="staff">Staff</button>
+        <button class="tab-btn" data-tab="practice">Practice</button>
         <button class="tab-btn" data-tab="data">Data</button>
         <button class="tab-btn" data-tab="log">Log</button>
         <button class="tab-btn" data-tab="account">Account</button>
@@ -2009,6 +2015,20 @@
             </div>
           </div>
 
+        </div>
+
+        <div class="tab-panel" id="tab-practice">
+          <div class="ci-form">
+            <label class="ci-label">Practice name<input type="text" id="ci-name" class="ci-input" placeholder="e.g. Hickory Surgery Associates"></label>
+            <label class="ci-label">Address<textarea id="ci-address" class="ci-input ci-textarea" rows="2" placeholder="Street, City, State ZIP"></textarea></label>
+            <label class="ci-label">Phone<input type="tel" id="ci-phone" class="ci-input" placeholder="(555) 555-5555"></label>
+            <label class="ci-label">Fax<input type="tel" id="ci-fax" class="ci-input" placeholder="(555) 555-5555"></label>
+            <label class="ci-label">Office Manager<input type="text" id="ci-office-manager" class="ci-input" placeholder="Name"></label>
+            <label class="ci-label">Scheduling Coordinator<input type="text" id="ci-scheduling-coord" class="ci-input" placeholder="Name"></label>
+            <label class="ci-label">Logo URL<input type="url" id="ci-logo-url" class="ci-input" placeholder="https://…"></label>
+            <div id="ci-logo-preview" style="margin-top:4px;min-height:0"></div>
+            <button class="data-btn" id="ciSaveBtn">&#x2713; Save practice info</button>
+          </div>
         </div>
 
         <div class="tab-panel" id="tab-account">
@@ -4067,6 +4087,7 @@
         const t = btn.dataset.tab;
         const visible = t === 'users' ? admin
           : t === 'log' ? admin
+          : t === 'practice' ? admin
           : t === 'data' ? (admin || scheduler)
           : t === 'staff' ? !!currentUser
           : true; // account always visible
@@ -4095,6 +4116,7 @@
         fetchDeactivatedStaff().then(renderDeactivatedList);
         fetchProfiles().then(renderUsersList);
         fetchAuditLog();
+        loadCompanyInfo();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
@@ -4273,6 +4295,43 @@
     });
 
     // ── Email recipients ───────────────────────────────────────────────────
+    async function loadCompanyInfo() {
+      const { data } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle();
+      if (!data) return;
+      document.getElementById('ci-name').value              = data.name                   ?? '';
+      document.getElementById('ci-address').value           = data.address                ?? '';
+      document.getElementById('ci-phone').value             = data.phone                  ?? '';
+      document.getElementById('ci-fax').value               = data.fax                    ?? '';
+      document.getElementById('ci-office-manager').value    = data.office_manager         ?? '';
+      document.getElementById('ci-scheduling-coord').value  = data.scheduling_coordinator ?? '';
+      document.getElementById('ci-logo-url').value          = data.logo_url               ?? '';
+      renderLogoPreview(data.logo_url);
+    }
+
+    function renderLogoPreview(url) {
+      const el = document.getElementById('ci-logo-preview');
+      el.innerHTML = url ? `<img src="${esc(url)}" alt="Logo preview" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:3px;border:1px solid #ECEFF1">` : '';
+    }
+
+    document.getElementById('ci-logo-url').addEventListener('input', e => renderLogoPreview(e.target.value.trim()));
+
+    document.getElementById('ciSaveBtn').addEventListener('click', async () => {
+      const payload = {
+        id:                      1,
+        name:                    document.getElementById('ci-name').value.trim() || null,
+        address:                 document.getElementById('ci-address').value.trim() || null,
+        phone:                   document.getElementById('ci-phone').value.trim() || null,
+        fax:                     document.getElementById('ci-fax').value.trim() || null,
+        office_manager:          document.getElementById('ci-office-manager').value.trim() || null,
+        scheduling_coordinator:  document.getElementById('ci-scheduling-coord').value.trim() || null,
+        logo_url:                document.getElementById('ci-logo-url').value.trim() || null,
+        updated_at:              new Date().toISOString(),
+      };
+      const { error } = await sb.from('company_info').upsert(payload);
+      if (error) { showToast('Save failed — please try again.'); return; }
+      showToast('Practice info saved.');
+    });
+
     async function loadRecipients() {
       const list = document.getElementById('recipientList');
       const { data, error } = await sb.from('email_recipients').select('id, email, label').order('created_at');
