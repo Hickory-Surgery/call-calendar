@@ -1,0 +1,19 @@
+name: Weekly Schedule Email
+
+on:
+  schedule:
+    # Every Friday at 2pm ET (7pm UTC). Adjust UTC offset for DST if needed.
+    - cron: '0 19 * * 5'
+  workflow_dispatch:  # Allow manual trigger for testing
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger weekly-email edge function
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/weekly-email" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}")
+          echo "Response status: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
