@@ -234,26 +234,19 @@ Deno.serve(async (req) => {
     }),
   ].join('\n')
 
-  // ── Fetch admin emails ────────────────────────────────────────────────────
-  const { data: adminProfiles } = await sb
-    .from('profiles')
-    .select('id')
-    .eq('role', 'admin')
+  // ── Fetch email recipients ────────────────────────────────────────────────
+  const { data: recipientRows } = await sb
+    .from('email_recipients')
+    .select('email')
+    .order('created_at')
 
-  if (!adminProfiles?.length) {
-    console.log('No admins found')
-    return new Response('No admins', { status: 200 })
+  if (!recipientRows?.length) {
+    console.log('No email recipients configured')
+    return new Response('No recipients', { status: 200 })
   }
 
-  const adminEmails: string[] = []
-  for (const { id } of adminProfiles) {
-    const { data: { user } } = await sb.auth.admin.getUserById(id)
-    if (user?.email) adminEmails.push(user.email)
-  }
-
-  if (!adminEmails.length) {
-    return new Response('No admin emails', { status: 200 })
-  }
+  const recipientEmails = recipientRows.map(r => r.email)
+  console.log('Sending to:', recipientEmails)
 
   // ── Send via Resend ───────────────────────────────────────────────────────
   const res = await fetch('https://api.resend.com/emails', {
@@ -264,7 +257,7 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       from: 'Call Calendar <onboarding@resend.dev>',
-      to: [adminEmails[0]], // resend.dev sandbox: can only send to account owner
+      to: [recipientEmails[0]], // resend.dev sandbox: update to recipientEmails once custom domain is set
       subject: `Call Schedule — ${weekLabel}`,
       html,
       text,

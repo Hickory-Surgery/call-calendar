@@ -1397,6 +1397,32 @@
     }
 
     /* ── Rates form ── */
+    .email-recipients-section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #ECEFF1;
+    }
+    .recipient-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; min-height: 4px; }
+    .recipient-row {
+      display: flex; align-items: center; gap: 6px;
+      background: #F5F7FA; border-radius: 5px; padding: 5px 8px;
+      font-size: 0.82rem; color: #37474F;
+    }
+    .recipient-email { flex: 1; }
+    .recipient-label { color: #90A4AE; font-size: 0.76rem; }
+    .recipient-del {
+      background: none; border: none; cursor: pointer;
+      color: #B0BEC5; font-size: 0.9rem; padding: 0 2px; line-height: 1;
+    }
+    .recipient-del:hover { color: #E53935; }
+    .recipient-add-row { display: flex; gap: 6px; }
+    .recipient-input {
+      flex: 1; border: 1px solid #D0D7DE; border-radius: 5px;
+      padding: 6px 9px; font-size: 0.82rem; color: #37474F;
+      font-family: var(--font); outline: none;
+    }
+    .recipient-input:focus { border-color: #1565C0; }
+
     .rates-section {
       margin-top: 14px;
       padding-top: 12px;
@@ -1876,6 +1902,16 @@
           <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
           <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
           <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+
+          <div class="email-recipients-section editor-only" id="emailRecipientsSection">
+            <div class="rates-section-title">Weekly Email Recipients</div>
+            <div class="recipient-list" id="recipientList"></div>
+            <div class="recipient-add-row">
+              <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off">
+              <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
+            </div>
+            <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated Friday schedule email.</div>
+          </div>
 
           <div class="rates-section admin-only" id="ratesSection">
             <div class="rates-section-title">Call Rates</div>
@@ -3604,10 +3640,14 @@
         btn.style.display = visible ? '' : 'none';
       });
 
-      // Show/hide admin-only data buttons
+      // Show/hide admin-only and editor-only elements
       document.querySelectorAll('#settingsOverlay .admin-only').forEach(el => {
         el.style.display = admin ? '' : 'none';
       });
+      document.querySelectorAll('#settingsOverlay .editor-only').forEach(el => {
+        el.style.display = (admin || scheduler) ? '' : 'none';
+      });
+      if (admin || scheduler) loadRecipients();
 
       // View-as section: only real admins see this
       const viewAsSection = document.getElementById('viewAsSection');
@@ -3749,6 +3789,50 @@
       );
       if (error) { showToast('Save rates failed — please try again.'); return; }
       showToast('Rates saved.');
+    });
+
+    // ── Email recipients ───────────────────────────────────────────────────
+    async function loadRecipients() {
+      const list = document.getElementById('recipientList');
+      const { data, error } = await sb.from('email_recipients').select('id, email, label').order('created_at');
+      if (error) { list.innerHTML = '<span style="font-size:0.78rem;color:#E53935">Failed to load.</span>'; return; }
+      if (!data.length) { list.innerHTML = '<span style="font-size:0.78rem;color:#90A4AE">No recipients yet.</span>'; return; }
+      list.innerHTML = data.map(r => `
+        <div class="recipient-row" data-id="${esc(r.id)}">
+          <span class="recipient-email">${esc(r.email)}</span>
+          ${r.label ? `<span class="recipient-label">${esc(r.label)}</span>` : ''}
+          <button class="recipient-del" title="Remove">✕</button>
+        </div>`).join('');
+    }
+
+    document.getElementById('recipientList').addEventListener('click', async e => {
+      const btn = e.target.closest('.recipient-del');
+      if (!btn) return;
+      const row = btn.closest('.recipient-row');
+      const id = row.dataset.id;
+      const { error } = await sb.from('email_recipients').delete().eq('id', id);
+      if (error) { showToast('Remove failed — please try again.'); return; }
+      row.remove();
+      if (!document.querySelector('.recipient-row')) {
+        document.getElementById('recipientList').innerHTML = '<span style="font-size:0.78rem;color:#90A4AE">No recipients yet.</span>';
+      }
+    });
+
+    document.getElementById('recipientAddBtn').addEventListener('click', async () => {
+      const input = document.getElementById('recipientEmailInput');
+      const email = input.value.trim().toLowerCase();
+      if (!email || !email.includes('@')) { showToast('Enter a valid email address.'); return; }
+      const { error } = await sb.from('email_recipients').insert({ email });
+      if (error) {
+        showToast(error.code === '23505' ? 'That address is already in the list.' : 'Add failed — please try again.');
+        return;
+      }
+      input.value = '';
+      loadRecipients();
+    });
+
+    document.getElementById('recipientEmailInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') document.getElementById('recipientAddBtn').click();
     });
 
     function closeSettings() {
