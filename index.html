@@ -3117,7 +3117,7 @@
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
-      if (!am && !pm && isHoliday(y, m, d)) {
+      if (!am && !pm && oncall_am === 'none' && oncall_pm === 'none' && isHoliday(y, m, d)) {
         return `<div class="closed-row holiday-closed${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
