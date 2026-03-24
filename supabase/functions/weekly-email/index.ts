@@ -78,21 +78,29 @@ Deno.serve(async (req) => {
   // ── Fetch assignments Mon–Sat (weekend stored under Saturday) ─────────────
   const { data: assignRows } = await sb
     .from('assignments')
-    .select('date, person_id, am, pm, oncall_am, oncall_pm')
+    .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
     .gte('date', iso(monday))
     .lte('date', iso(saturday))
 
-  // data[dateIso][shortName] = assignment row
-  const data: Record<string, Record<string, { am: string; pm: string; oncall_am: string; oncall_pm: string }>> = {}
+  type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string; exception: boolean }
+
+  // data[dateIso][shortName] = cell
+  const data: Record<string, Record<string, Cell>> = {}
   for (const row of assignRows ?? []) {
     const person = staffById[row.person_id]?.short_name
     if (!person) continue
     if (!data[row.date]) data[row.date] = {}
-    data[row.date][person] = { am: row.am || '', pm: row.pm || '', oncall_am: row.oncall_am || 'none', oncall_pm: row.oncall_pm || 'none' }
+    data[row.date][person] = {
+      am: row.am || '',
+      pm: row.pm || '',
+      oncall_am: row.oncall_am || 'none',
+      oncall_pm: row.oncall_pm || 'none',
+      exception: row.exception ?? false,
+    }
   }
 
-  function getCell(dateIso: string, person: string) {
-    return data[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none' }
+  function getCell(dateIso: string, person: string): Cell {
+    return data[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false }
   }
 
   // ── Fetch bari_call for the week ──────────────────────────────────────────
@@ -105,7 +113,7 @@ Deno.serve(async (req) => {
   const bariCallPerson = bariRow ? (staffById[bariRow.person_id]?.short_name ?? '') : ''
 
   // ── Compute per-day summaries ─────────────────────────────────────────────
-  type DaySummary = { date: Date; nightCall: string; backup: string; bari: string; closed: boolean }
+  type DaySummary = { date: Date; nightCall: string; dayCall: string; backup: string; bari: string; closed: boolean }
   const summaries: DaySummary[] = []
 
   const friIso = iso(addDays(saturday, -1)) // Friday before the weekend
@@ -115,19 +123,19 @@ Deno.serve(async (req) => {
     // Weekend data lives under Saturday's date
     const dataIso = dow === 0 ? iso(saturday) : iso(day)
 
-    function isOnCall(c: ReturnType<typeof getCell>): boolean {
+    function isOnCall(c: Cell): boolean {
       if (dow === 6) return c.oncall_am !== 'none'
       if (dow === 0) return c.oncall_pm !== 'none'
       return c.oncall_am !== 'none' || c.oncall_pm !== 'none'
     }
 
-    function isHosp(c: ReturnType<typeof getCell>): boolean {
+    function isHosp(c: Cell): boolean {
       if (dow === 6) return c.am === 'hosp'
       if (dow === 0) return c.pm === 'hosp'
       return c.am === 'hosp' || c.pm === 'hosp'
     }
 
-    function isClosed(c: ReturnType<typeof getCell>): boolean {
+    function isClosed(c: Cell): boolean {
       if (dow === 6) return c.am === 'CLOSED'
       if (dow === 0) return c.pm === 'CLOSED'
       return c.am === 'CLOSED'
@@ -139,7 +147,7 @@ Deno.serve(async (req) => {
     // Night call: first person with oncall set for this day's slot
     const callPerson = staffOrder.find(p => isOnCall(getCell(dataIso, p))) ?? ''
 
-    // Backup (= day call / HOSP): first person with hosp; weekends fall back to Friday
+    // Backup: first person with HOSP; weekends fall back to Friday
     let backupPerson = staffOrder.find(p => isHosp(getCell(dataIso, p))) ?? ''
     if (!backupPerson && (dow === 0 || dow === 6)) {
       backupPerson = staffOrder.find(p => {
@@ -147,6 +155,10 @@ Deno.serve(async (req) => {
         return c.am === 'hosp' || c.pm === 'hosp'
       }) ?? ''
     }
+
+    // Day call: exception (green pill) person if present, otherwise HOSP person
+    const exceptionPerson = staffOrder.find(p => getCell(dataIso, p).exception) ?? ''
+    const dayCallPerson = exceptionPerson || backupPerson
 
     // Bariatric: call person if bari+, else backup if bari+, else dropdown
     const bariPerson = bariatric[callPerson] ? callPerson
@@ -156,6 +168,7 @@ Deno.serve(async (req) => {
     summaries.push({
       date: day,
       nightCall: callPerson,
+      dayCall: dayCallPerson,
       backup: backupPerson,
       bari: bariPerson,
       closed: dayClosed,
@@ -165,23 +178,28 @@ Deno.serve(async (req) => {
   // ── Build email ───────────────────────────────────────────────────────────
   const weekLabel = `Week of ${fmtLong(monday)}`
 
+  function cell(name: string): string {
+    return name ? displayName(name) : '<span style="color:#B0BEC5">—</span>'
+  }
+
   const rowsHtml = summaries.map(s => {
     if (s.closed) {
       return `<tr>
         <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1;font-weight:500">${fmtDay(s.date)}</td>
-        <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #ECEFF1;color:#90A4AE;font-style:italic">CLOSED</td>
+        <td colspan="4" style="padding:8px 12px;border-bottom:1px solid #ECEFF1;color:#90A4AE;font-style:italic">CLOSED</td>
       </tr>`
     }
     return `<tr>
       <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1;font-weight:500">${fmtDay(s.date)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${s.nightCall ? displayName(s.nightCall) : '<span style="color:#B0BEC5">—</span>'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${s.backup ? displayName(s.backup) : '<span style="color:#B0BEC5">—</span>'}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${s.bari ? displayName(s.bari) : '<span style="color:#B0BEC5">—</span>'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.nightCall)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.dayCall)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.backup)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.bari)}</td>
     </tr>`
   }).join('\n')
 
   const html = `<!DOCTYPE html>
-<html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:600px;margin:0 auto;padding:24px">
+<html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
   <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">Call Schedule</h2>
   <p style="font-size:0.9rem;color:#607D8B;margin-top:0;margin-bottom:20px">${weekLabel}</p>
   <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
@@ -189,7 +207,8 @@ Deno.serve(async (req) => {
       <tr style="background:#F5F7FA">
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Day</th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Night Call</th>
-        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Day Call / Backup</th>
+        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Day Call</th>
+        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Backup</th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Bariatric</th>
       </tr>
     </thead>
@@ -203,12 +222,13 @@ Deno.serve(async (req) => {
   const text = [
     `Call Schedule — ${weekLabel}`,
     '',
-    'Day              Night Call    Day Call/Backup  Bariatric',
-    '─'.repeat(60),
+    'Day              Night Call    Day Call      Backup        Bariatric',
+    '─'.repeat(70),
     ...summaries.map(s => {
       const day = fmtDay(s.date).padEnd(17)
       if (s.closed) return `${day}CLOSED`
-      return `${day}${displayName(s.nightCall).padEnd(14)}${displayName(s.backup).padEnd(17)}${displayName(s.bari)}`
+      const dn = (n: string) => (n ? displayName(n) : '—')
+      return `${day}${dn(s.nightCall).padEnd(14)}${dn(s.dayCall).padEnd(14)}${dn(s.backup).padEnd(14)}${dn(s.bari)}`
     }),
   ].join('\n')
 
