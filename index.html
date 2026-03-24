@@ -216,6 +216,7 @@
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
     .cell-date-num[data-cov-y] { cursor: pointer; }
+    .date-has-override { text-decoration: underline; text-decoration-style: dotted; text-decoration-color: #1565C0; text-underline-offset: 3px; }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -3256,6 +3257,16 @@
            : dropdown;
     }
 
+    // Returns a tooltip string describing active overrides for the date, or '' if none.
+    function coverageOverrideTitle(iso) {
+      const ov = coverageOverrides[iso];
+      if (!ov) return '';
+      const parts = [];
+      if (ov.backup !== null && ov.backup !== undefined) parts.push(`Backup: ${ov.backup || '—'}`);
+      if (ov.bari   !== null && ov.bari   !== undefined) parts.push(`Bari: ${ov.bari || '—'}`);
+      return parts.length ? `Manual override — ${parts.join('  ·  ')}` : '';
+    }
+
     // Returns CSS class for coverage warning on the day number ('date-warn-backup' | 'date-warn-bari' | '')
     // Only for admin/scheduler; override takes priority over algorithm.
     function dayCoverageClass(y, m, d, dow) {
@@ -3294,8 +3305,12 @@
 
       const dow = date.getDay();
       const warnCls = inMonth ? dayCoverageClass(y, m, d, dow) : '';
+      const iso = inMonth ? isoFromParts(y, m, d) : '';
+      const ovTitle = iso ? coverageOverrideTitle(iso) : '';
       const editAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}"` : '';
-      const dateSpan = `<span class="cell-date-num${warnCls ? ' ' + warnCls : ''}"${editAttr}>${d}</span>`;
+      const titleAttr = ovTitle ? ` title="${esc(ovTitle)}"` : '';
+      const ovCls = ovTitle ? ' date-has-override' : '';
+      const dateSpan = `<span class="cell-date-num${warnCls ? ' ' + warnCls : ''}${ovCls}"${editAttr}${titleAttr}>${d}</span>`;
       let html = `<div class="${cls}"><div class="cell-date">${dateSpan}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
@@ -3344,8 +3359,12 @@
       const weWarn = satWarn === 'date-warn-backup' || sunWarn === 'date-warn-backup' ? 'date-warn-backup'
                    : satWarn === 'date-warn-bari'   || sunWarn === 'date-warn-bari'   ? 'date-warn-bari'
                    : '';
+      const weIso = inMonth ? isoFromParts(y, m, d) : '';
+      const weOvTitle = weIso ? coverageOverrideTitle(weIso) : '';
       const weEditAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}" data-cov-weekend="1"` : '';
-      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
+      const weTitleAttr = weOvTitle ? ` title="${esc(weOvTitle)}"` : '';
+      const weOvCls = weOvTitle ? ' date-has-override' : '';
+      let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}${weOvCls}"${weEditAttr}${weTitleAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
       if (inMonth) {
         const band = hospBandRange(y, m, d);
         for (let i = 0; i < staff.length; i++) {
