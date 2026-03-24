@@ -3242,7 +3242,8 @@
           if (val === 'CLOSED' && editing && !editing.slot) {
             const { y, m, d } = editing;
             for (const p of staff) {
-              setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
+              const ex = getCell(y, m, d, p);
+              setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: ex.oncall_am, oncall_pm: ex.oncall_pm });
             }
             closeEdit(); reRenderMonth(y, m); return;
           }
@@ -3271,7 +3272,10 @@
           const val = lbl.dataset.asgn;
           if (val === 'CLOSED' && editing && !editing.slot) {
             const { y, m, d } = editing;
-            for (const p of staff) setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: 'none', oncall_pm: 'none' });
+            for (const p of staff) {
+              const ex = getCell(y, m, d, p);
+              setCell(y, m, d, p, { am: 'CLOSED', pm: '', oncall_am: ex.oncall_am, oncall_pm: ex.oncall_pm });
+            }
             closeEdit(); reRenderMonth(y, m); return;
           }
           applySlotVal(val);
