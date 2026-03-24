@@ -16,7 +16,18 @@
   <script>
     const SUPABASE_URL = 'https://pkjlnjsswoadftkseffo.supabase.co';
     const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBramxuanNzd29hZGZ0a3NlZmZvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQxMjkyMzIsImV4cCI6MjA4OTcwNTIzMn0.OKaHUh1QCH3CNk15swiwhjn66HcEk7lpbmNZ3Xt1h6M';
-    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    // Session-only by default. Reads localStorage as fallback so "stay logged in" sessions survive
+    // browser restarts. Writes to localStorage only when the sb-remember-me flag is set.
+    const authStorage = {
+      getItem:    k => sessionStorage.getItem(k) ?? localStorage.getItem(k),
+      setItem(k, v) {
+        sessionStorage.setItem(k, v);
+        if (localStorage.getItem('sb-remember-me') === '1') localStorage.setItem(k, v);
+        else localStorage.removeItem(k);
+      },
+      removeItem(k) { sessionStorage.removeItem(k); localStorage.removeItem(k); },
+    };
+    const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON, { auth: { storage: authStorage } });
   </script>
   <style>
     * {
@@ -677,6 +688,11 @@
       font-size: 0.78rem; color: #1565C0; cursor: pointer;
       text-decoration: underline; font-family: var(--font);
     }
+    .login-remember {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.78rem; color: #607D8B; cursor: pointer; align-self: flex-start;
+    }
+    .login-remember input { cursor: pointer; accent-color: #1565C0; }
     @media (max-width: 480px) {
       .login-card { padding: 28px 20px; width: calc(100vw - 40px); }
     }
@@ -1736,6 +1752,7 @@
         <input type="email"    id="li-email" class="login-input" placeholder="Email address" autocomplete="email">
         <input type="password" id="li-pass"  class="login-input" placeholder="Password"      autocomplete="current-password">
         <div class="login-msg" id="li-msg"></div>
+        <label class="login-remember"><input type="checkbox" id="liRemember"> Stay logged in (private computer)</label>
         <button class="btn-email-action" id="btnSignIn">Sign in</button>
         <div class="login-links">
           <button class="login-link" id="btnToForgot">Forgot password?</button>
@@ -1952,6 +1969,7 @@
               <input type="email"    id="si-email" class="login-input" placeholder="Email address" autocomplete="email">
               <input type="password" id="si-pass"  class="login-input" placeholder="Password"      autocomplete="current-password">
               <div class="login-msg" id="si-msg"></div>
+              <label class="login-remember"><input type="checkbox" id="siRemember"> Stay logged in (private computer)</label>
               <button class="btn-email-action" id="sBtnSignIn">Sign in</button>
               <div class="login-links">
                 <button class="login-link" id="sBtnToForgot">Forgot password?</button>
@@ -2074,6 +2092,8 @@
 
     // ── Main login screen ──────────────────────────────────────────
     document.getElementById('btnGoogleSignIn').addEventListener('click', () => {
+      if (document.getElementById('liRemember').checked) localStorage.setItem('sb-remember-me', '1');
+      else localStorage.removeItem('sb-remember-me');
       sb.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin + window.location.pathname }
@@ -2090,6 +2110,8 @@
       const pass  = document.getElementById('li-pass').value;
       const msg   = document.getElementById('li-msg');
       if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      if (document.getElementById('liRemember').checked) localStorage.setItem('sb-remember-me', '1');
+      else localStorage.removeItem('sb-remember-me');
       const { error } = await sb.auth.signInWithPassword({ email, password: pass });
       if (error) msg.textContent = error.message;
     });
@@ -3710,6 +3732,8 @@
     });
 
     document.getElementById('btnGoogleSignInSettings').addEventListener('click', () => {
+      if (document.getElementById('siRemember').checked) localStorage.setItem('sb-remember-me', '1');
+      else localStorage.removeItem('sb-remember-me');
       sb.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin + window.location.pathname }
@@ -3726,6 +3750,8 @@
       const pass  = document.getElementById('si-pass').value;
       const msg   = document.getElementById('si-msg');
       if (!email || !pass) { msg.textContent = 'Enter email and password.'; return; }
+      if (document.getElementById('siRemember').checked) localStorage.setItem('sb-remember-me', '1');
+      else localStorage.removeItem('sb-remember-me');
       const { error } = await sb.auth.signInWithPassword({ email, password: pass });
       if (error) msg.textContent = error.message;
     });
@@ -3770,6 +3796,7 @@
     });
 
     document.getElementById('signOutBtn').addEventListener('click', async () => {
+      localStorage.removeItem('sb-remember-me');
       await sb.auth.signOut();
       document.getElementById('settingsOverlay').classList.remove('open');
     });
