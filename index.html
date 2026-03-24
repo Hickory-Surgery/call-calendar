@@ -1954,6 +1954,10 @@
           </div>
           <div class="staff-list" id="staffList"></div>
           <button class="add-btn" id="addStaffBtn">+ Add person</button>
+          <div class="admin-only" id="deactivatedSection" style="margin-top:14px;padding-top:12px;border-top:1px solid #ECEFF1">
+            <div class="rates-section-title" id="deactivatedToggle" style="cursor:pointer;user-select:none">Deactivated staff ›</div>
+            <div id="deactivatedList" style="display:none;margin-top:8px"></div>
+          </div>
         </div>
 
         <div class="tab-panel" id="tab-users">
@@ -2336,6 +2340,7 @@
     let editing = null;
 
     let staffRows = [];
+    let deactivatedStaffRows = [];
     let staffByShortName = {};
     let staffById = {};
     const undoStack = [];
@@ -3837,6 +3842,7 @@
 
       renderStaffList();
       if (admin) {
+        fetchDeactivatedStaff().then(renderDeactivatedList);
         fetchProfiles().then(renderUsersList);
         fetchAuditLog();
         fetchCurrentRates().then(rates => {
@@ -4181,6 +4187,48 @@
         });
       });
     }
+
+    async function fetchDeactivatedStaff() {
+      const { data } = await sb.from('staff')
+        .select('id, short_name, display_name, start_date, stop_date')
+        .eq('active', false)
+        .order('sort_order');
+      deactivatedStaffRows = data ?? [];
+    }
+
+    function renderDeactivatedList() {
+      const list = document.getElementById('deactivatedList');
+      if (!deactivatedStaffRows.length) {
+        list.innerHTML = '<div style="font-size:0.8rem;color:#90A4AE">None</div>';
+        return;
+      }
+      list.innerHTML = deactivatedStaffRows.map(row => `
+        <div class="staff-item-readonly" data-id="${row.id}" style="justify-content:space-between">
+          <span class="staff-readonly-name">${esc(row.short_name)}</span>
+          <span class="staff-readonly-full">${esc(row.display_name || '')}</span>
+          <button class="data-btn restore-btn" data-id="${row.id}" style="margin:0;padding:4px 10px;font-size:0.78rem">Restore</button>
+        </div>`).join('');
+      list.querySelectorAll('.restore-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          btn.disabled = true;
+          const { error } = await sb.from('staff').update({ active: true }).eq('id', btn.dataset.id);
+          if (error) { showToast('Restore failed — please try again.'); btn.disabled = false; return; }
+          await fetchStaff();
+          await fetchDeactivatedStaff();
+          renderStaffList();
+          renderDeactivatedList();
+          render();
+        });
+      });
+    }
+
+    document.getElementById('deactivatedToggle').addEventListener('click', () => {
+      const body = document.getElementById('deactivatedList');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('deactivatedToggle').textContent =
+        open ? 'Deactivated staff ›' : 'Deactivated staff ↓';
+    });
 
     function syncStaffFromDOM() {
       const items = document.querySelectorAll('#staffList .staff-item');
