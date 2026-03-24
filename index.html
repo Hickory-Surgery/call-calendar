@@ -3204,11 +3204,6 @@
     function dayCoverageClass(y, m, d, dow) {
       if (!canEdit()) return '';
       if (!staff.length) return '';
-      const firstCell = getCell(y, m, d, staff[0]);
-      const closed = dow === 6 ? firstCell.am === 'CLOSED'
-                   : dow === 0 ? firstCell.pm === 'CLOSED'
-                   :             firstCell.am === 'CLOSED';
-      if (closed) return '';
       const exceptionPerson = staff.find(p => getCell(y, m, d, p).exception) ?? '';
       let backup = exceptionPerson || (staff.find(p => {
         const c = getCell(y, m, d, p);
