@@ -215,6 +215,8 @@
 
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
+    .cov-section-label { font-size:0.8rem; font-weight:700; color:#1565C0; letter-spacing:0.04em; text-transform:uppercase; padding:10px 0 4px; }
+    .cov-section-label:first-child { padding-top:0; }
     .cov-grid { width:100%; border-collapse:collapse; font-size:0.85rem; margin-bottom:4px; }
     .cov-grid th { padding:4px 10px 6px; text-align:center; color:#546E7A; font-weight:600; font-size:0.8rem; border-bottom:2px solid #ECEFF1; }
     .cov-grid th:first-child { text-align:left; }
@@ -3236,8 +3238,9 @@
 
     // Returns the short name of the bariatric call person for a given day.
     // Override (if set) takes priority over algorithm.
+    // For Sunday (dow=0) d is Saturday's day; override is stored under Sunday's actual date (d+1).
     function bariPersonForDay(y, m, d, dow) {
-      const iso = isoFromParts(y, m, d);
+      const iso = dow === 0 ? isoFromParts(y, m, d + 1) : isoFromParts(y, m, d);
       const ov = coverageOverrides[iso];
       if (ov?.bari !== null && ov?.bari !== undefined) return ov.bari;
       function isOnCallDay(c) {
@@ -3268,10 +3271,11 @@
 
     // Returns CSS class for coverage warning on the day number ('date-warn-backup' | 'date-warn-bari' | '')
     // Only for admin/scheduler; override takes priority over algorithm.
+    // For Sunday (dow=0) d is Saturday's day; override is stored under Sunday's actual date (d+1).
     function dayCoverageClass(y, m, d, dow) {
       if (!canEdit()) return '';
       if (!staff.length) return '';
-      const iso = isoFromParts(y, m, d);
+      const iso = dow === 0 ? isoFromParts(y, m, d + 1) : isoFromParts(y, m, d);
       const ov = coverageOverrides[iso];
       const backup = (ov?.backup !== null && ov?.backup !== undefined) ? ov.backup : backupPersonForDay(y, m, d, dow);
       if (!backup) return 'date-warn-backup';
@@ -3357,8 +3361,14 @@
       const weWarn = satWarn === 'date-warn-backup' || sunWarn === 'date-warn-backup' ? 'date-warn-backup'
                    : satWarn === 'date-warn-bari'   || sunWarn === 'date-warn-bari'   ? 'date-warn-bari'
                    : '';
-      const weIso = inMonth ? isoFromParts(y, m, d) : '';
-      const weOvTitle = weIso ? coverageOverrideTitle(weIso) : '';
+      const weOvTitle = inMonth ? (() => {
+        const s = coverageOverrideTitle(isoFromParts(y, m, d));
+        const u = coverageOverrideTitle(isoFromParts(y, m, d + 1));
+        if (s && u) return `Sat — ${s.replace('Manual override — ', '')}  |  Sun — ${u.replace('Manual override — ', '')}`;
+        if (s) return s;
+        if (u) return `Sun — ${u.replace('Manual override — ', '')}`;
+        return '';
+      })() : '';
       const weEditAttr = inMonth && canEdit() ? ` data-cov-y="${y}" data-cov-m="${m}" data-cov-d="${d}" data-cov-weekend="1"` : '';
       const weTitleAttr = weOvTitle ? ` title="${esc(weOvTitle)}"` : '';
       let html = `<div class="${cls}"><div class="cell-date"><span class="cell-date-num${weWarn ? ' ' + weWarn : ''}"${weEditAttr}${weTitleAttr}>${dateStr}</span>${bariSelect ? `<span class="wk-selects">${bariSelect}</span>` : ''}</div>`;
@@ -3402,8 +3412,12 @@
       })();
       const nm = nameHidden ? '' : esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
-      const ov = coverageOverrides[isoFromParts(y, m, d)];
-      const ovCls = !nameHidden && ov && (ov.backup === person || ov.bari === person) ? ' date-has-override' : '';
+      const satOv = coverageOverrides[isoFromParts(y, m, d)];
+      const sunOv = weekend ? coverageOverrides[isoFromParts(y, m, d + 1)] : null;
+      const ovCls = !nameHidden && (
+        (satOv && (satOv.backup === person || satOv.bari === person)) ||
+        (sunOv && (sunOv.backup === person || sunOv.bari === person))
+      ) ? ' date-has-override' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
         return `<div class="closed-row${callCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
@@ -3660,8 +3674,8 @@
     function openCoverageEdit(y, m, d, isWeekend) {
       if (!canEdit()) return;
       coverageEditing = { y, m, d, isWeekend };
-      const iso = isoFromParts(y, m, d);
-      const ov = coverageOverrides[iso] ?? {};
+      const satISO = isoFromParts(y, m, d);
+      const sunISO = isoFromParts(y, m, d + 1);
 
       // Title
       const label = isWeekend
@@ -3669,48 +3683,64 @@
         : `${DAYS[new Date(y, m, d).getDay()]} ${MONTHS[m]} ${d}`;
       document.getElementById('coverageTitle').textContent = `${label} — Coverage Override`;
 
-      // Computed values (ignoring any existing override for display)
-      const dow = isWeekend ? 6 : new Date(y, m, d).getDay();
-      const compBackup = backupPersonForDay(y, m, d, dow);
-      const compBari   = bariPersonForDay(y, m, d, dow);
+      // Build one grid section (Backup + Bari columns) for a given day-of-week.
+      // Temporarily clears overrides so "Computed" shows the algorithmic value.
+      function buildSection(dow, isoKey, cbSuffix) {
+        const ov = coverageOverrides[isoKey] ?? {};
+        // Compute raw algorithmic values (temporarily ignore override for this ISO)
+        const saved = coverageOverrides[isoKey];
+        delete coverageOverrides[isoKey];
+        const compBackup = backupPersonForDay(y, m, d, dow);
+        const compBari   = bariPersonForDay(y, m, d, dow);
+        if (saved !== undefined) coverageOverrides[isoKey] = saved;
 
-      // Build checkbox grid
-      const rows = staff.map(p => {
-        const sn = shortName(p);
-        const backupChecked = ov.backup === p ? ' checked' : '';
-        const bariCell = bariatric[p]
-          ? `<td><input type="checkbox" class="cov-bari-cb" data-person="${esc(p)}"${ov.bari === p ? ' checked' : ''}></td>`
-          : '<td></td>';
-        return `<tr class="cov-person">
-          <td>${esc(sn)}</td>
-          <td><input type="checkbox" class="cov-backup-cb" data-person="${esc(p)}"${backupChecked}></td>
-          ${bariCell}
-        </tr>`;
-      }).join('');
+        const rows = staff.map(p => {
+          const sn = shortName(p);
+          const bariCell = bariatric[p]
+            ? `<td><input type="checkbox" class="cov-bari-${cbSuffix}" data-person="${esc(p)}"${ov.bari === p ? ' checked' : ''}></td>`
+            : '<td></td>';
+          return `<tr class="cov-person">
+            <td>${esc(sn)}</td>
+            <td><input type="checkbox" class="cov-backup-${cbSuffix}" data-person="${esc(p)}"${ov.backup === p ? ' checked' : ''}></td>
+            ${bariCell}
+          </tr>`;
+        }).join('');
 
-      document.getElementById('coverageGrid').innerHTML = `
-        <table class="cov-grid">
-          <thead>
-            <tr><th></th><th>Backup</th><th>Bari</th></tr>
-          </thead>
-          <tbody>
-            <tr class="cov-computed">
-              <td>Computed</td>
-              <td>${esc(shortName(compBackup) || '—')}</td>
-              <td>${esc(shortName(compBari) || '—')}</td>
-            </tr>
-            ${rows}
-          </tbody>
-        </table>`;
+        return `
+          <table class="cov-grid">
+            <thead>
+              <tr><th></th><th>Backup</th><th>Bari</th></tr>
+            </thead>
+            <tbody>
+              <tr class="cov-computed">
+                <td>Computed</td>
+                <td>${esc(shortName(compBackup) || '—')}</td>
+                <td>${esc(shortName(compBari) || '—')}</td>
+              </tr>
+              ${rows}
+            </tbody>
+          </table>`;
+      }
 
-      // Single-select per column
+      if (isWeekend) {
+        document.getElementById('coverageGrid').innerHTML =
+          `<div class="cov-section-label">Saturday</div>${buildSection(6, satISO, 'sat')}` +
+          `<div class="cov-section-label">Sunday</div>${buildSection(0, sunISO, 'sun')}`;
+      } else {
+        const dow = new Date(y, m, d).getDay();
+        document.getElementById('coverageGrid').innerHTML = buildSection(dow, satISO, 'sat');
+      }
+
+      // Single-select per column within each section
       document.getElementById('coverageGrid').addEventListener('change', e => {
         const cb = e.target;
-        if (cb.classList.contains('cov-backup-cb')) {
-          document.querySelectorAll('.cov-backup-cb').forEach(el => { if (el !== cb) el.checked = false; });
-        } else if (cb.classList.contains('cov-bari-cb')) {
-          document.querySelectorAll('.cov-bari-cb').forEach(el => { if (el !== cb) el.checked = false; });
-        }
+        ['sat', 'sun'].forEach(sfx => {
+          if (cb.classList.contains(`cov-backup-${sfx}`)) {
+            document.querySelectorAll(`.cov-backup-${sfx}`).forEach(el => { if (el !== cb) el.checked = false; });
+          } else if (cb.classList.contains(`cov-bari-${sfx}`)) {
+            document.querySelectorAll(`.cov-bari-${sfx}`).forEach(el => { if (el !== cb) el.checked = false; });
+          }
+        });
       });
 
       document.getElementById('coverageOverlay').classList.add('open');
@@ -3728,37 +3758,54 @@
 
     document.getElementById('coverageSaveBtn').addEventListener('click', async () => {
       if (!coverageEditing) return;
-      const { y, m, d } = coverageEditing;
-      const iso = isoFromParts(y, m, d);
-      const backupCb = document.querySelector('.cov-backup-cb:checked');
-      const bariCb   = document.querySelector('.cov-bari-cb:checked');
-      const backupVal = backupCb?.dataset.person ?? '';
-      const bariVal   = bariCb?.dataset.person   ?? '';
-      const backupRow = backupVal ? staffByShortName[backupVal] : null;
-      const bariRow   = bariVal   ? staffByShortName[bariVal]   : null;
-      const { error } = await sb.from('coverage_overrides').upsert({
-        date:       iso,
-        backup_id:  backupRow?.id ?? null,
-        bari_id:    bariRow?.id   ?? null,
-        updated_by: currentUser?.id ?? null,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) { showToast('Save failed — please try again.'); return; }
-      coverageOverrides[iso] = {
-        backup: backupVal || null,
-        bari:   bariVal   || null,
-      };
+      const { y, m, d, isWeekend } = coverageEditing;
+      const satISO = isoFromParts(y, m, d);
+      const sunISO = isoFromParts(y, m, d + 1);
+
+      function readRow(sfx) {
+        const backupVal = document.querySelector(`.cov-backup-${sfx}:checked`)?.dataset.person ?? '';
+        const bariVal   = document.querySelector(`.cov-bari-${sfx}:checked`)?.dataset.person   ?? '';
+        return { backupVal, bariVal };
+      }
+
+      async function upsertRow(iso, backupVal, bariVal) {
+        const backupRow = backupVal ? staffByShortName[backupVal] : null;
+        const bariRow   = bariVal   ? staffByShortName[bariVal]   : null;
+        return sb.from('coverage_overrides').upsert({
+          date:       iso,
+          backup_id:  backupRow?.id ?? null,
+          bari_id:    bariRow?.id   ?? null,
+          updated_by: currentUser?.id ?? null,
+          updated_at: new Date().toISOString(),
+        });
+      }
+
+      const { backupVal: satBkp, bariVal: satBari } = readRow('sat');
+      if (isWeekend) {
+        const { backupVal: sunBkp, bariVal: sunBari } = readRow('sun');
+        const [r1, r2] = await Promise.all([upsertRow(satISO, satBkp, satBari), upsertRow(sunISO, sunBkp, sunBari)]);
+        if (r1.error || r2.error) { showToast('Save failed — please try again.'); return; }
+        coverageOverrides[satISO] = { backup: satBkp || null, bari: satBari || null };
+        coverageOverrides[sunISO] = { backup: sunBkp || null, bari: sunBari || null };
+      } else {
+        const { error } = await upsertRow(satISO, satBkp, satBari);
+        if (error) { showToast('Save failed — please try again.'); return; }
+        coverageOverrides[satISO] = { backup: satBkp || null, bari: satBari || null };
+      }
       render();
       closeCoverageEdit();
     });
 
     document.getElementById('coverageClearBtn').addEventListener('click', async () => {
       if (!coverageEditing) return;
-      const { y, m, d } = coverageEditing;
-      const iso = isoFromParts(y, m, d);
-      const { error } = await sb.from('coverage_overrides').delete().eq('date', iso);
+      const { y, m, d, isWeekend } = coverageEditing;
+      const satISO = isoFromParts(y, m, d);
+      const sunISO = isoFromParts(y, m, d + 1);
+      const datesToDelete = isWeekend ? [satISO, sunISO] : [satISO];
+      const { error } = await sb.from('coverage_overrides').delete().in('date', datesToDelete);
       if (error) { showToast('Clear failed — please try again.'); return; }
-      delete coverageOverrides[iso];
+      delete coverageOverrides[satISO];
+      if (isWeekend) delete coverageOverrides[sunISO];
       render();
       closeCoverageEdit();
     });
