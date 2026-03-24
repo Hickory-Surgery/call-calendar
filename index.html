@@ -4087,7 +4087,7 @@
         const t = btn.dataset.tab;
         const visible = t === 'users' ? admin
           : t === 'log' ? admin
-          : t === 'practice' ? admin
+          : t === 'practice' ? (admin || scheduler)
           : t === 'data' ? (admin || scheduler)
           : t === 'staff' ? !!currentUser
           : true; // account always visible
@@ -4112,11 +4112,11 @@
       switchTab('account');
 
       renderStaffList();
+      if (admin || scheduler) loadCompanyInfo();
       if (admin) {
         fetchDeactivatedStaff().then(renderDeactivatedList);
         fetchProfiles().then(renderUsersList);
         fetchAuditLog();
-        loadCompanyInfo();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
