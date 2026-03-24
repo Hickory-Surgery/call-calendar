@@ -216,7 +216,7 @@
     .date-warn-backup { color: #E53935; }
     .date-warn-bari   { color: #FF8F00; }
     .cell-date-num[data-cov-y] { cursor: pointer; }
-    .date-has-override { text-decoration: underline; text-decoration-style: dotted; text-decoration-color: #1565C0; text-underline-offset: 3px; }
+    .date-has-override { outline: 1.5px solid #1565C0; outline-offset: 2px; border-radius: 2px; }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -1948,7 +1948,7 @@
         <button class="btn-clear-inline" id="coverageClearBtn">Clear override</button>
       </div>
       <div id="coverageBody" style="padding:12px 16px 4px">
-        <div id="coverageComputed" style="font-size:0.78rem;color:#90A4AE;margin-bottom:14px"></div>
+        <div id="coverageComputed" style="font-size:0.84rem;color:#90A4AE;margin-bottom:14px"></div>
         <div style="display:flex;flex-direction:column;gap:12px">
           <label style="display:flex;align-items:center;gap:10px;font-size:0.85rem">
             <span style="min-width:110px;color:#546E7A">Backup override</span>
@@ -4006,6 +4006,11 @@
       }
       if (e.key === 'Home' && !e.metaKey && !e.ctrlKey) {
         e.preventDefault(); scrollToMonth(today.getFullYear(), today.getMonth()); return;
+      }
+      if (document.getElementById('coverageOverlay').classList.contains('open')) {
+        if (e.key === 'Escape') { e.preventDefault(); closeCoverageEdit(); return; }
+        if (e.key === 'Enter')  { e.preventDefault(); document.getElementById('coverageSaveBtn').click(); return; }
+        return;
       }
       if (!document.getElementById('editOverlay').classList.contains('open')) return;
       if (e.key === 'ArrowRight') { e.preventDefault(); saveAndAdvance(); return; }
