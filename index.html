@@ -1984,6 +1984,7 @@
     let viewAsRole = null; // null = use real role; set by admin to preview another role
     let realtimeChannel = null;
     let sessionApplied = false;
+    let passwordRecoveryMode = false;
     const effectiveRole = () => viewAsRole ?? currentRole;
     const canEdit = () => effectiveRole() === 'scheduler' || effectiveRole() === 'admin';
     const isAdmin = () => effectiveRole() === 'admin';
@@ -2061,6 +2062,7 @@
       if (pass.length < 6) { msg.textContent = 'Password must be at least 6 characters.'; return; }
       const { error } = await sb.auth.updateUser({ password: pass });
       if (error) { msg.textContent = error.message; return; }
+      passwordRecoveryMode = false;
       showToast('Password updated — signing you in.');
       const { data: { session } } = await sb.auth.getSession();
       if (session) applySession(session);
@@ -2151,6 +2153,7 @@
 
     // Initial load: check for a stored session
     sb.auth.getSession().then(({ data: { session } }) => {
+      if (passwordRecoveryMode) return; // reset link flow takes over
       if (session?.user) {
         applySession(session);
       } else {
@@ -2162,11 +2165,13 @@
     sb.auth.onAuthStateChange((event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         // User clicked reset link — show set-new-password form
+        passwordRecoveryMode = true;
         loginScreen.classList.remove('hidden');
         loginScreen.classList.remove('checking');
         showLV('lv-newpass');
         return;
       }
+      if (passwordRecoveryMode) return; // block auto-login until password is set
       if (session?.user) {
         applySession(session);
       } else if (event === 'SIGNED_OUT') {
