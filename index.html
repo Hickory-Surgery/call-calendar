@@ -3592,10 +3592,10 @@
       if (personEditableOnDate(person, ny, nm, nd)) {
         openEdit(ny, nm, nd, person);
       } else {
-        // Blank cell — treat as end-of-row, advance to next weekday's staff[0]
+        // Blank cell — treat as end-of-week, jump to the following Monday
         const dow2 = new Date(ny, nm, nd).getDay();
-        const skip2 = dow2 === 5 ? 3 : dow2 === 6 ? 2 : 1;
-        const next2 = new Date(ny, nm, nd + skip2);
+        const daysToMon = (8 - dow2) % 7 || 7;
+        const next2 = new Date(ny, nm, nd + daysToMon);
         const ny2 = next2.getFullYear(), nm2 = next2.getMonth(), nd2 = next2.getDate();
         if (nm2 !== m || ny2 !== y) scrollToMonth(ny2, nm2);
         else if (!document.getElementById(`month-${ny2}-${nm2}`)) appendNextMonth();
@@ -3664,10 +3664,10 @@
       if (personEditableOnDate(person, py, pm2, pd)) {
         openEdit(py, pm2, pd, person);
       } else {
-        // Blank cell — treat as start-of-row, retreat to prev weekday's last staff
+        // Blank cell — treat as start-of-week, retreat to the previous Saturday
         const dow2 = new Date(py, pm2, pd).getDay();
-        const skip2 = dow2 === 1 ? 3 : dow2 === 0 ? 1 : 1;
-        const prev2 = new Date(py, pm2, pd - skip2);
+        const daysToSat = dow2 === 0 ? 1 : dow2 === 6 ? 7 : dow2 + 1;
+        const prev2 = new Date(py, pm2, pd - daysToSat);
         const py2 = prev2.getFullYear(), pm3 = prev2.getMonth(), pd2 = prev2.getDate();
         if (pm3 !== m || py2 !== y) scrollToMonth(py2, pm3);
         else if (!document.getElementById(`month-${py2}-${pm3}`)) appendNextMonth();
