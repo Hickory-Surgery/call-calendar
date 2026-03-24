@@ -3651,7 +3651,7 @@
       });
     }
 
-    async function openSettings() {
+    function openSettings() {
       const admin = isAdmin();
       const scheduler = effectiveRole() === 'scheduler';
 
@@ -3681,24 +3681,20 @@
         btn.classList.toggle('active', btn.dataset.role === (viewAsRole ?? currentRole));
       });
 
-      const firstVisible = [...document.querySelectorAll('#settingsTabs .tab-btn')]
-        .find(b => b.style.display !== 'none');
-      if (firstVisible) switchTab(firstVisible.dataset.tab);
+      switchTab('account');
 
       renderStaffList();
       if (admin) {
-        await Promise.all([
-          fetchProfiles().then(renderUsersList),
-          fetchAuditLog(),
-          fetchCurrentRates().then(rates => {
-            document.getElementById('rateFryeWd').value = rates.frye_weekday;
-            document.getElementById('rateFryeWe').value = rates.frye_weekend;
-            document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
-            document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
-          }),
-        ]);
+        fetchProfiles().then(renderUsersList);
+        fetchAuditLog();
+        fetchCurrentRates().then(rates => {
+          document.getElementById('rateFryeWd').value = rates.frye_weekday;
+          document.getElementById('rateFryeWe').value = rates.frye_weekend;
+          document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
+          document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
+        });
       }
-      if (admin || scheduler) await loadRecipients();
+      if (admin || scheduler) loadRecipients();
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
       document.getElementById('accountSignedIn').style.display = currentUser ? 'block' : 'none';
       if (!currentUser) showSV('sv-signin');
