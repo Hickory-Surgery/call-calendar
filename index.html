@@ -729,7 +729,7 @@
       overflow-y: auto;
     }
 
-    #settingsOverlay .sheet {
+    #settingsOverlay .sheet.log-active {
       height: 88vh;
       overflow: hidden;
       display: flex;
@@ -4099,6 +4099,7 @@
       document.querySelectorAll('.tab-panel').forEach(panel => {
         panel.classList.toggle('active', panel.id === `tab-${tabName}`);
       });
+      document.querySelector('#settingsOverlay .sheet').classList.toggle('log-active', tabName === 'log');
     }
 
     function openSettings() {
