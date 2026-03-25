@@ -27,7 +27,7 @@ function makeSummary(am: string, pm: string, oncall_am: string, oncall_pm: strin
     : (oncall_am === 'single' || oncall_pm === 'single') ? 'single'
     : (oncall_am === 'day'    || oncall_pm === 'day')    ? 'day'
     : 'none'
-  const oncallStr = oncall === 'double' ? 'Double Call' : oncall === 'single' ? 'Night Call' : oncall === 'day' ? 'Day Call' : ''
+  const oncallStr = oncall === 'double' ? 'Double Call' : oncall === 'single' ? 'Single Call' : ''
 
   const exStr = exception ? ' (exception)' : ''
   return [assign, oncallStr + exStr].filter(Boolean).join(' · ') || 'Assignment'
@@ -124,29 +124,23 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const nameById: Record<string, string> = Object.fromEntries((staffRows ?? []).map((r: any) => [r.id, r.short_name]))
 
-    // dateIso → [shortName, ...] keyed by call type
-    const nightCallMap: Record<string, string[]> = {}
-    const dayCallMap:   Record<string, string[]> = {}
+    // dateIso → [shortName, ...] for people who are on-call that day
+    const oncallMap: Record<string, string[]> = {}
     const { data: assignRows } = await sb
       .from('assignments')
       .select('date, person_id, oncall_am, oncall_pm')
       .or('oncall_am.neq.none,oncall_pm.neq.none')
       .order('date')
-    function addToMap(map: Record<string, string[]>, date: string, name: string) {
-      map[date] = [...(map[date] ?? []), name]
-    }
     // deno-lint-ignore no-explicit-any
     for (const row of (assignRows ?? []) as any[]) {
       const name = nameById[row.person_id]
       if (!name) continue
       const dow = new Date(row.date + 'T00:00:00Z').getUTCDay()
-      const sunDate = dow === 6 ? addDay(row.date, 1) : ''
-      const slots: [string, string][] = dow === 6
-        ? [[row.oncall_am, row.date], [row.oncall_pm, sunDate]]
-        : [[row.oncall_am, row.date], [row.oncall_pm, row.date]]
-      for (const [val, date] of slots) {
-        if (val === 'single') addToMap(nightCallMap, date, name)
-        if (val === 'day')    addToMap(dayCallMap,   date, name)
+      if (dow === 6) {
+        if (row.oncall_am !== 'none') oncallMap[row.date]             = [...(oncallMap[row.date]             ?? []), name]
+        if (row.oncall_pm !== 'none') oncallMap[addDay(row.date, 1)]  = [...(oncallMap[addDay(row.date, 1)]  ?? []), name]
+      } else {
+        oncallMap[row.date] = [...(oncallMap[row.date] ?? []), name]
       }
     }
 
@@ -169,21 +163,19 @@ Deno.serve(async (req) => {
       if (name) bariMap[row.date] = name
     }
 
-    const allDates = [...new Set([...Object.keys(nightCallMap), ...Object.keys(dayCallMap), ...Object.keys(bariMap)])].sort()
+    const allDates = [...new Set([...Object.keys(oncallMap), ...Object.keys(bariMap)])].sort()
     const now = icalNow()
     const events: string[] = []
     for (const dateIso of allDates) {
-      const nightNames = nightCallMap[dateIso] ?? []
-      const dayNames   = dayCallMap[dateIso]   ?? []
-      const bariName   = bariMap[dateIso]
+      const oncallNames = oncallMap[dateIso] ?? []
+      const bariName    = bariMap[dateIso]
       const parts: string[] = []
-      if (nightNames.length) parts.push(`Night Call: ${nightNames.join(' · ')}`)
-      if (dayNames.length)   parts.push(`Day Call: ${dayNames.join(' · ')}`)
-      if (bariName)          parts.push(`Bari: ${bariName}`)
+      if (oncallNames.length) parts.push(`On Call: ${oncallNames.join(' · ')}`)
+      if (bariName)           parts.push(`Bari: ${bariName}`)
       events.push(buildEvent(`${dateIso}-oncall@hickory-surgery`, dateIso, parts.join(' | '), now))
     }
 
-    const calName = (co.name ?? 'Practice') + ' Night Call & Bari'
+    const calName = (co.name ?? 'Practice') + ' On Call & Bari'
     return new Response(buildICal(calName, 'oncall', events), {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',

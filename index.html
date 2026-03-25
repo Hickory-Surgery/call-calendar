@@ -1891,7 +1891,7 @@
       </div>
       <div class="day-summary" id="daySummary">
         <div class="ds-call-group">
-          <span class="ds-label">Night Call:</span>
+          <span class="ds-label">On Call:</span>
           <span class="ds-value empty" id="ds-call">—</span>
         </div>
         <div class="ds-stack">
@@ -1931,12 +1931,8 @@
     <!-- Legend -->
     <div class="legend">
       <div class="legend-item">
-        <div class="legend-swatch" style="background:var(--oncall-day)"></div>
-        Day call
-      </div>
-      <div class="legend-item">
         <div class="legend-swatch" style="background:var(--oncall-single)"></div>
-        Night call
+        Single call
       </div>
       <div class="legend-item">
         <div class="legend-swatch" style="background:var(--oncall-double)"></div>
@@ -2007,10 +2003,10 @@
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;border-bottom:1px solid #ECEFF1;margin-bottom:10px">
             <div style="flex:1">
-              <div style="font-size:0.82rem;font-weight:600;color:#37474F">Night Call &amp; Bari Call feed</div>
-              <div style="font-size:0.72rem;color:#90A4AE">Who is on night call and bari call each day</div>
+              <div style="font-size:0.82rem;font-weight:600;color:#37474F">On Call &amp; Bari Call feed</div>
+              <div style="font-size:0.72rem;color:#90A4AE">Who is on call and bari call each day</div>
             </div>
-            <button class="sub-btn sub-btn-disabled" id="practiceCallFeedBtn" data-url="" title="Copy subscribe link" aria-label="Copy Night Call and Bari Call feed link">&#128197;</button>
+            <button class="sub-btn sub-btn-disabled" id="practiceCallFeedBtn" data-url="" title="Copy subscribe link" aria-label="Copy On Call and Bari Call feed link">&#128197;</button>
           </div>
           <div class="staff-list" id="staffList"></div>
           <button class="add-btn" id="addStaffBtn">+ Add person</button>
@@ -3483,8 +3479,8 @@
       editState.oncall_am = editState.oncall_pm = val;
     }
 
-    const ONCALL_VALS = ['none', 'day', 'single', 'double'];
-    const ONCALL_LABEL = { none: '<u>N</u>o call', day: 'Da<u>y</u> Call', single: 'Night Call', double: '<u>D</u>ouble' };
+    const ONCALL_VALS = ['none', 'single', 'double'];
+    const ONCALL_LABEL = { none: '<u>N</u>o Call', single: '<u>S</u>ingle Call', double: '<u>D</u>ouble Call' };
     const ASSIGN_LABEL = { '': '— none —', unavailable: 'unavail' };
 
     function renderChoiceGrid() {
@@ -4119,7 +4115,6 @@
       }
       if (key === 'n') { applySlotOncall('none'); renderChoiceGrid(); return; }
       if (key === 'e') { editState.exception = !editState.exception; renderChoiceGrid(); return; }
-      if (key === 'y') { applySlotOncall('day'); renderChoiceGrid(); return; }
       if (key === 's') { applySlotOncall('single'); renderChoiceGrid(); return; }
       if (key === 'd') { applySlotOncall('double'); renderChoiceGrid(); return; }
     });
