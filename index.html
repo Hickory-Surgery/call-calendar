@@ -2924,23 +2924,40 @@
 
     // Computes and persists day_call_id and bari_id for a given day into daily_coverage.
     // Called after every successful assignment upsert or delete.
-    // For weekend rows (stored under Saturday), also persists Sunday.
+    // For Saturday rows, also persists Sunday.
+    // For Friday rows, also cascades to Saturday and Sunday (Friday HOSP is weekend fallback).
     function persistDailyCoverage(y, m, d) {
       const dow = new Date(y, m, d).getDay();
-      const daysToProcess = (dow === 6) ? [{ dow: 6, iso: isoFromParts(y, m, d) }, { dow: 0, iso: isoFromParts(y, m, d + 1) }]
-                          : [{ dow, iso: isoFromParts(y, m, d) }];
 
-      for (const { dow: dayDow, iso } of daysToProcess) {
+      // Each entry: sy/sm/sd = Saturday-row coordinates for data lookups (getCell, backupPersonForDay)
+      //             dayDow = effective day of week, iso = calendar date ISO string
+      const daysToProcess = [];
+      if (dow === 6) {
+        daysToProcess.push({ sy: y, sm: m, sd: d, dayDow: 6, iso: isoFromParts(y, m, d) });
+        daysToProcess.push({ sy: y, sm: m, sd: d, dayDow: 0, iso: isoFromParts(y, m, d + 1) });
+      } else {
+        daysToProcess.push({ sy: y, sm: m, sd: d, dayDow: dow, iso: isoFromParts(y, m, d) });
+        if (dow === 5) {
+          // Friday HOSP is fallback backup for the weekend — cascade to Sat and Sun
+          const sat = new Date(y, m, d + 1);
+          const [satY, satM, satD] = [sat.getFullYear(), sat.getMonth(), sat.getDate()];
+          const sun = new Date(satY, satM, satD + 1);
+          daysToProcess.push({ sy: satY, sm: satM, sd: satD, dayDow: 6, iso: isoFromParts(satY, satM, satD) });
+          daysToProcess.push({ sy: satY, sm: satM, sd: satD, dayDow: 0, iso: isoFromParts(sun.getFullYear(), sun.getMonth(), sun.getDate()) });
+        }
+      }
+
+      for (const { sy, sm, sd, dayDow, iso } of daysToProcess) {
         // Only overwrite bari_id if algorithm produces a result; preserve manual override otherwise
         const existingBari = dailyCoverage[iso]?.bari ?? null;
-        const computedDayCall = backupPersonForDay(y, m, d, dayDow);
+        const computedDayCall = backupPersonForDay(sy, sm, sd, dayDow);
         const computedBari    = (() => {
           function isOnCallDay(c) {
             if (dayDow === 6) return c.oncall_am !== 'none';
             if (dayDow === 0) return c.oncall_pm !== 'none';
             return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
           }
-          const callPerson   = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
+          const callPerson   = staff.find(p => isOnCallDay(getCell(sy, sm, sd, p))) ?? '';
           const backupPerson = computedDayCall;
           return bariatric[callPerson] ? callPerson : bariatric[backupPerson] ? backupPerson : null;
         })();
