@@ -2315,7 +2315,7 @@
       sessionApplied = false;
       if (realtimeChannel) { sb.removeChannel(realtimeChannel); realtimeChannel = null; }
       await fetchStaff();
-      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
+      await Promise.all([fetchAssignments(), fetchDailyCoverage()]);
       setupRealtimeSubscriptions();
       render();
       updateDaySummary();
@@ -2356,7 +2356,7 @@
       currentUser = session.user;
       currentRole = role;
       await fetchStaff();
-      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
+      await Promise.all([fetchAssignments(), fetchDailyCoverage()]);
       setupRealtimeSubscriptions();
       render();
       updateDaySummary();
@@ -2424,8 +2424,7 @@
     let staff = [];
     let data = {};
     let bariatric = {};
-    let bariCall = {};
-    let coverageOverrides = {}; // { "YYYY-MM-DD": { backup: shortName|'', bari: shortName|'' } }
+    let dailyCoverage = {}; // { "YYYY-MM-DD": { dayCall: shortName|null, bari: shortName|null } }
     let fullnames = {};
     let editing = null;
 
@@ -2503,26 +2502,13 @@
       }
     }
 
-    async function fetchBariCall() {
-      const { data: rows, error } = await sb.from('bari_call').select('*');
-      if (error) return; // keep localStorage fallback
-      bariCall = {};
-      for (const row of rows) {
-        if (!row.person_id) continue;
-        const staffRow = staffById[row.person_id];
-        if (!staffRow) continue;
-        const { y, m, d } = isoToDateParts(row.week_start);
-        bariCall[`${y}-${m + 1}-${d}`] = staffRow.short_name;
-      }
-    }
-
-    async function fetchCoverageOverrides() {
-      const { data: rows } = await sb.from('coverage_overrides').select('date, backup_id, bari_id');
-      coverageOverrides = {};
+    async function fetchDailyCoverage() {
+      const { data: rows } = await sb.from('daily_coverage').select('date, day_call_id, bari_id');
+      dailyCoverage = {};
       for (const row of rows ?? []) {
-        coverageOverrides[row.date] = {
-          backup: row.backup_id ? (staffById[row.backup_id]?.short_name ?? '') : null,
-          bari:   row.bari_id   ? (staffById[row.bari_id]?.short_name   ?? '') : null,
+        dailyCoverage[row.date] = {
+          dayCall: row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : null,
+          bari:    row.bari_id     ? (staffById[row.bari_id]?.short_name     ?? '') : null,
         };
       }
     }
@@ -2771,33 +2757,19 @@
           render();
           updateDaySummary();
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'bari_call' }, payload => {
-          const { eventType, new: n, old: o } = payload;
-          if (eventType === 'DELETE') {
-            const { y, m, d } = isoToDateParts(o.week_start);
-            delete bariCall[`${y}-${m + 1}-${d}`];
-          } else {
-            const staffRow = n.person_id ? staffById[n.person_id] : null;
-            const { y, m, d } = isoToDateParts(n.week_start);
-            const wk = `${y}-${m + 1}-${d}`;
-            if (staffRow) bariCall[wk] = staffRow.short_name;
-            else delete bariCall[wk];
-          }
-          render();
-          updateDaySummary();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'coverage_overrides' }, payload => {
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_coverage' }, payload => {
           const { eventType, new: n, old: o } = payload;
           const dateIso = eventType === 'DELETE' ? o.date : n.date;
           if (eventType === 'DELETE') {
-            delete coverageOverrides[dateIso];
+            delete dailyCoverage[dateIso];
           } else {
-            coverageOverrides[dateIso] = {
-              backup: n.backup_id ? (staffById[n.backup_id]?.short_name ?? '') : null,
-              bari:   n.bari_id   ? (staffById[n.bari_id]?.short_name   ?? '') : null,
+            dailyCoverage[dateIso] = {
+              dayCall: n.day_call_id ? (staffById[n.day_call_id]?.short_name ?? '') : null,
+              bari:    n.bari_id     ? (staffById[n.bari_id]?.short_name     ?? '') : null,
             };
           }
           render();
+          updateDaySummary();
         })
         .subscribe();
     }
@@ -2919,6 +2891,8 @@
             if (prev !== undefined) data[key] = prev; else delete data[key];
             render();
             showToast('Save failed — please try again.');
+          } else {
+            persistDailyCoverage(y, m, d);
           }
         });
       }
@@ -2941,8 +2915,61 @@
               if (prev !== undefined) data[key] = prev;
               render();
               showToast('Delete failed — please try again.');
+            } else {
+              persistDailyCoverage(y, m, d);
             }
           });
+      }
+    }
+
+    // Computes and persists day_call_id and bari_id for a given day into daily_coverage.
+    // Called after every successful assignment upsert or delete.
+    // For weekend rows (stored under Saturday), also persists Sunday.
+    function persistDailyCoverage(y, m, d) {
+      const dow = new Date(y, m, d).getDay();
+      const daysToProcess = (dow === 6) ? [{ dow: 6, iso: isoFromParts(y, m, d) }, { dow: 0, iso: isoFromParts(y, m, d + 1) }]
+                          : [{ dow, iso: isoFromParts(y, m, d) }];
+
+      for (const { dow: dayDow, iso } of daysToProcess) {
+        // Only overwrite bari_id if algorithm produces a result; preserve manual override otherwise
+        const existingBari = dailyCoverage[iso]?.bari ?? null;
+        const computedDayCall = backupPersonForDay(y, m, d, dayDow);
+        const computedBari    = (() => {
+          function isOnCallDay(c) {
+            if (dayDow === 6) return c.oncall_am !== 'none';
+            if (dayDow === 0) return c.oncall_pm !== 'none';
+            return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+          }
+          const callPerson   = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
+          const backupPerson = computedDayCall;
+          return bariatric[callPerson] ? callPerson : bariatric[backupPerson] ? backupPerson : null;
+        })();
+
+        const dayCallRow = computedDayCall ? staffByShortName[computedDayCall] : null;
+        // Use computed bari if available; fall back to existing manual value
+        const bariName = computedBari ?? existingBari;
+        const bariRow  = bariName ? staffByShortName[bariName] : null;
+
+        // Only upsert if we have something to write (avoid creating empty rows)
+        if (!dayCallRow && !bariRow) {
+          // Nothing computed — delete the row if it existed (to avoid stale data)
+          sb.from('daily_coverage').delete().eq('date', iso);
+          delete dailyCoverage[iso];
+        } else {
+          sb.from('daily_coverage').upsert({
+            date:        iso,
+            day_call_id: dayCallRow?.id ?? null,
+            bari_id:     bariRow?.id    ?? null,
+            updated_at:  new Date().toISOString(),
+          }).then(({ error }) => {
+            if (!error) {
+              dailyCoverage[iso] = {
+                dayCall: computedDayCall || null,
+                bari:    bariName || null,
+              };
+            }
+          });
+        }
       }
     }
 
@@ -3268,11 +3295,11 @@
     }
 
     // Returns the short name of the bariatric call person for a given day.
-    // Override (if set) takes priority over algorithm.
+    // dailyCoverage[iso].bari (manual override) takes priority over algorithm.
     // For Sunday (dow=0) d is Saturday's day; override is stored under Sunday's actual date (d+1).
     function bariPersonForDay(y, m, d, dow) {
       const iso = dow === 0 ? isoFromParts(y, m, d + 1) : isoFromParts(y, m, d);
-      const ov = coverageOverrides[iso];
+      const ov = dailyCoverage[iso];
       if (ov?.bari !== null && ov?.bari !== undefined) return ov.bari;
       function isOnCallDay(c) {
         if (dow === 6) return c.oncall_am !== 'none';
@@ -3281,22 +3308,18 @@
       }
       const callPerson = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
       const backupPerson = backupPersonForDay(y, m, d, dow);
-      // weekKey expects Saturday — compute from dow for weekday cells
-      const satDate = (dow === 6 || dow === 0) ? new Date(y, m, d) : new Date(y, m, d + (6 - dow));
-      const wk = weekKey(satDate);
-      const dropdown = bariCall[wk] ?? '';
       return bariatric[callPerson] ? callPerson
            : bariatric[backupPerson] ? backupPerson
-           : dropdown;
+           : '';
     }
 
     // Returns a tooltip string describing active overrides for the date, or '' if none.
     function coverageOverrideTitle(iso) {
-      const ov = coverageOverrides[iso];
+      const ov = dailyCoverage[iso];
       if (!ov) return '';
       const parts = [];
-      if (ov.backup !== null && ov.backup !== undefined) parts.push(`Backup: ${ov.backup || '—'}`);
-      if (ov.bari   !== null && ov.bari   !== undefined) parts.push(`Bari: ${ov.bari || '—'}`);
+      if (ov.dayCall !== null && ov.dayCall !== undefined) parts.push(`Day Call: ${ov.dayCall || '—'}`);
+      if (ov.bari    !== null && ov.bari    !== undefined) parts.push(`Bari: ${ov.bari || '—'}`);
       return parts.length ? `Manual override — ${parts.join('  ·  ')}` : '';
     }
 
@@ -3307,9 +3330,9 @@
       if (!canEdit()) return '';
       if (!staff.length) return '';
       const iso = dow === 0 ? isoFromParts(y, m, d + 1) : isoFromParts(y, m, d);
-      const ov = coverageOverrides[iso];
-      const backup = (ov?.backup !== null && ov?.backup !== undefined) ? ov.backup : backupPersonForDay(y, m, d, dow);
-      if (!backup) return 'date-warn-backup';
+      const ov = dailyCoverage[iso];
+      const dayCall = (ov?.dayCall !== null && ov?.dayCall !== undefined) ? ov.dayCall : backupPersonForDay(y, m, d, dow);
+      if (!dayCall) return 'date-warn-backup';
       if (!bariPersonForDay(y, m, d, dow)) return 'date-warn-bari';
       return '';
     }
@@ -3376,7 +3399,6 @@
         : satIn && !sunIn             ? `${sd} <span class="date-out">/ ${ud}</span>`
         : !satIn && sunIn             ? `<span class="date-out">${sd} /</span> ${ud}`
         :                               `${sd} / ${ud}`;
-      const wk = weekKey(sat);
 
       // Use worst-case warning across both Saturday and Sunday
       const satWarn = inMonth ? dayCoverageClass(y, m, d, 6) : '';
@@ -3435,11 +3457,11 @@
       })();
       const nm = nameHidden ? '' : esc(shortName(person));
       const bandCls = inBand ? ' hosp-band' : '';
-      const satOv = coverageOverrides[isoFromParts(y, m, d)];
-      const sunOv = weekend ? coverageOverrides[isoFromParts(y, m, d + 1)] : null;
+      const satOv = dailyCoverage[isoFromParts(y, m, d)];
+      const sunOv = weekend ? dailyCoverage[isoFromParts(y, m, d + 1)] : null;
       const ovCls = !nameHidden && (
-        (satOv && (satOv.backup === person || satOv.bari === person)) ||
-        (sunOv && (sunOv.backup === person || sunOv.bari === person))
+        (satOv && (satOv.dayCall === person || satOv.bari === person)) ||
+        (sunOv && (sunOv.dayCall === person || sunOv.bari === person))
       ) ? ' date-has-override' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
@@ -3709,13 +3731,13 @@
       // Build one grid section (Backup + Bari columns) for a given day-of-week.
       // Temporarily clears overrides so "Computed" shows the algorithmic value.
       function buildSection(dow, isoKey, cbSuffix) {
-        const ov = coverageOverrides[isoKey] ?? {};
+        const ov = dailyCoverage[isoKey] ?? {};
         // Compute raw algorithmic values (temporarily ignore override for this ISO)
-        const saved = coverageOverrides[isoKey];
-        delete coverageOverrides[isoKey];
-        const compBackup = backupPersonForDay(y, m, d, dow);
-        const compBari   = bariPersonForDay(y, m, d, dow);
-        if (saved !== undefined) coverageOverrides[isoKey] = saved;
+        const saved = dailyCoverage[isoKey];
+        delete dailyCoverage[isoKey];
+        const compDayCall = backupPersonForDay(y, m, d, dow);
+        const compBari    = bariPersonForDay(y, m, d, dow);
+        if (saved !== undefined) dailyCoverage[isoKey] = saved;
 
         const rows = staff.map(p => {
           const sn = shortName(p);
@@ -3724,7 +3746,7 @@
             : '<td></td>';
           return `<tr class="cov-person">
             <td>${esc(sn)}</td>
-            <td><input type="checkbox" class="cov-backup-${cbSuffix}" data-person="${esc(p)}"${ov.backup === p ? ' checked' : ''}></td>
+            <td><input type="checkbox" class="cov-backup-${cbSuffix}" data-person="${esc(p)}"${ov.dayCall === p ? ' checked' : ''}></td>
             ${bariCell}
           </tr>`;
         }).join('');
@@ -3732,12 +3754,12 @@
         return `
           <table class="cov-grid">
             <thead>
-              <tr><th></th><th>Backup</th><th>Bari</th></tr>
+              <tr><th></th><th>Day Call</th><th>Bari</th></tr>
             </thead>
             <tbody>
               <tr class="cov-computed">
                 <td>Computed</td>
-                <td>${esc(shortName(compBackup) || '—')}</td>
+                <td>${esc(shortName(compDayCall) || '—')}</td>
                 <td>${esc(shortName(compBari) || '—')}</td>
               </tr>
               ${rows}
@@ -3791,15 +3813,15 @@
         return { backupVal, bariVal };
       }
 
-      async function upsertRow(iso, backupVal, bariVal) {
-        const backupRow = backupVal ? staffByShortName[backupVal] : null;
-        const bariRow   = bariVal   ? staffByShortName[bariVal]   : null;
-        return sb.from('coverage_overrides').upsert({
-          date:       iso,
-          backup_id:  backupRow?.id ?? null,
-          bari_id:    bariRow?.id   ?? null,
-          updated_by: currentUser?.id ?? null,
-          updated_at: new Date().toISOString(),
+      async function upsertRow(iso, dayCallVal, bariVal) {
+        const dayCallRow = dayCallVal ? staffByShortName[dayCallVal] : null;
+        const bariRow    = bariVal    ? staffByShortName[bariVal]    : null;
+        return sb.from('daily_coverage').upsert({
+          date:        iso,
+          day_call_id: dayCallRow?.id ?? null,
+          bari_id:     bariRow?.id    ?? null,
+          updated_by:  currentUser?.id ?? null,
+          updated_at:  new Date().toISOString(),
         });
       }
 
@@ -3808,12 +3830,12 @@
         const { backupVal: sunBkp, bariVal: sunBari } = readRow('sun');
         const [r1, r2] = await Promise.all([upsertRow(satISO, satBkp, satBari), upsertRow(sunISO, sunBkp, sunBari)]);
         if (r1.error || r2.error) { showToast('Save failed — please try again.'); return; }
-        coverageOverrides[satISO] = { backup: satBkp || null, bari: satBari || null };
-        coverageOverrides[sunISO] = { backup: sunBkp || null, bari: sunBari || null };
+        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null };
+        dailyCoverage[sunISO] = { dayCall: sunBkp || null, bari: sunBari || null };
       } else {
         const { error } = await upsertRow(satISO, satBkp, satBari);
         if (error) { showToast('Save failed — please try again.'); return; }
-        coverageOverrides[satISO] = { backup: satBkp || null, bari: satBari || null };
+        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null };
       }
       render();
       closeCoverageEdit();
@@ -3825,10 +3847,10 @@
       const satISO = isoFromParts(y, m, d);
       const sunISO = isoFromParts(y, m, d + 1);
       const datesToDelete = isWeekend ? [satISO, sunISO] : [satISO];
-      const { error } = await sb.from('coverage_overrides').delete().in('date', datesToDelete);
+      const { error } = await sb.from('daily_coverage').delete().in('date', datesToDelete);
       if (error) { showToast('Clear failed — please try again.'); return; }
-      delete coverageOverrides[satISO];
-      if (isWeekend) delete coverageOverrides[sunISO];
+      delete dailyCoverage[satISO];
+      if (isWeekend) delete dailyCoverage[sunISO];
       render();
       closeCoverageEdit();
     });
@@ -4891,7 +4913,7 @@
     // ─────────────────────────────────────────────
     document.getElementById('exportBtn').addEventListener('click', () => {
       const blob = new Blob(
-        [JSON.stringify({ staff, data, bariatric, bariCall, fullnames }, null, 2)],
+        [JSON.stringify({ staff, data, bariatric, fullnames }, null, 2)],
         { type: 'application/json' }
       );
       Object.assign(document.createElement('a'), {
@@ -4952,19 +4974,7 @@
         if (rows.length) await sb.from('assignments').insert(rows);
       }
 
-      // 3. BariCall — delete all, bulk insert from imported data
-      if (imported.bariCall && typeof imported.bariCall === 'object') {
-        await sb.from('bari_call').delete().not('week_start', 'is', null);
-        const rows = [];
-        for (const [wk, personShort] of Object.entries(imported.bariCall)) {
-          const staffRow = staffByShortName[personShort];
-          if (!staffRow) continue;
-          rows.push({ week_start: isoFromWeekKey(wk), person_id: staffRow.id });
-        }
-        if (rows.length) await sb.from('bari_call').insert(rows);
-      }
-
-      await Promise.all([fetchAssignments(), fetchBariCall(), fetchCoverageOverrides()]);
+      await Promise.all([fetchAssignments(), fetchDailyCoverage()]);
     }
 
     document.getElementById('importBtn').addEventListener('click', () => {
@@ -5003,13 +5013,9 @@
     document.getElementById('clearAllBtn').addEventListener('click', () => {
       if (!confirm('Clear ALL calendar data? This cannot be undone.')) return;
       data = {};
-      bariCall = {};
       closeSettings();
       render();
       sb.from('assignments').delete().not('id', 'is', null).then(({ error }) => {
-        if (error) showToast('Clear failed — please try again.');
-      });
-      sb.from('bari_call').delete().not('week_start', 'is', null).then(({ error }) => {
         if (error) showToast('Clear failed — please try again.');
       });
     });
@@ -5084,7 +5090,6 @@
     // ─────────────────────────────────────────────
     function updateDaySummary() {
       const [ty, tm, td] = todayDataDate();
-      const wk = todayWeekKey();
       const cd = callDate();
       const dow = cd.getDay(); // 0=Sun, 6=Sat
 

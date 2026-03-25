@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
   // ── Fetch staff ───────────────────────────────────────────────────────────
   const { data: staffRows, error: staffErr } = await sb
     .from('staff')
-    .select('id, short_name, display_name, is_bariatric')
+    .select('id, short_name, display_name')
     .eq('active', true)
     .order('sort_order')
 
@@ -104,7 +104,6 @@ Deno.serve(async (req) => {
 
   const staffOrder: string[] = staffRows.map(r => r.short_name)
   const staffById: Record<string, typeof staffRows[number]> = Object.fromEntries(staffRows.map(r => [r.id, r]))
-  const bariatric: Record<string, boolean> = Object.fromEntries(staffRows.map(r => [r.short_name, r.is_bariatric]))
 
   function displayName(shortName: string): string {
     const row = staffRows.find(r => r.short_name === shortName)
@@ -139,30 +138,19 @@ Deno.serve(async (req) => {
     return data[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false }
   }
 
-  // ── Fetch bari_call for the week ──────────────────────────────────────────
-  const { data: bariRow } = await sb
-    .from('bari_call')
-    .select('person_id')
-    .eq('week_start', iso(monday))
-    .maybeSingle()
-
-  const bariCallPerson = bariRow ? (staffById[bariRow.person_id]?.short_name ?? '') : ''
-
-  // ── Fetch coverage overrides Mon–Sat ──────────────────────────────────────
-  const { data: ovRows } = await sb
-    .from('coverage_overrides')
-    .select('date, backup_id, bari_id')
+  // ── Fetch daily_coverage Mon–Sun ─────────────────────────────────────────
+  const { data: covRows } = await sb
+    .from('daily_coverage')
+    .select('date, day_call_id, bari_id')
     .gte('date', iso(monday))
-    .lte('date', iso(saturday))
+    .lte('date', iso(addDays(monday, 6)))
 
-  // overrides[dateIso] = { backup: shortName|'', bari: shortName|'' }
-  // null means "no override for this field"; '' means explicitly cleared
-  type Override = { backup: string | null; bari: string | null }
-  const overrides: Record<string, Override> = {}
-  for (const row of ovRows ?? []) {
-    overrides[row.date] = {
-      backup: row.backup_id ? (staffById[row.backup_id]?.short_name ?? '') : null,
-      bari:   row.bari_id   ? (staffById[row.bari_id]?.short_name   ?? '') : null,
+  type Coverage = { dayCall: string; bari: string }
+  const coverage: Record<string, Coverage> = {}
+  for (const row of covRows ?? []) {
+    coverage[row.date] = {
+      dayCall: row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : '',
+      bari:    row.bari_id     ? (staffById[row.bari_id]?.short_name     ?? '') : '',
     }
   }
 
@@ -170,23 +158,17 @@ Deno.serve(async (req) => {
   type DaySummary = { date: Date; nightCall: string; dayCall: string; backup: string; bari: string; closed: boolean }
   const summaries: DaySummary[] = []
 
-  const friIso = iso(addDays(saturday, -1)) // Friday before the weekend
-
   for (const day of days) {
     const dow = day.getUTCDay() // 0=Sun, 6=Sat
-    // Weekend data lives under Saturday's date; overrides follow the same convention
+    // Weekend data in assignments lives under Saturday's date
     const dataIso = dow === 0 ? iso(saturday) : iso(day)
+    // daily_coverage uses the actual calendar date for each day
+    const covIso = iso(day)
 
     function isOnCall(c: Cell): boolean {
       if (dow === 6) return c.oncall_am !== 'none'
       if (dow === 0) return c.oncall_pm !== 'none'
       return c.oncall_am !== 'none' || c.oncall_pm !== 'none'
-    }
-
-    function isHosp(c: Cell): boolean {
-      if (dow === 6) return c.am === 'hosp'
-      if (dow === 0) return c.pm === 'hosp'
-      return c.am === 'hosp' || c.pm === 'hosp'
     }
 
     function isClosed(c: Cell): boolean {
@@ -201,40 +183,15 @@ Deno.serve(async (req) => {
     // Night call: first person with oncall set for this day's slot
     const callPerson = staffOrder.find(p => isOnCall(getCell(dataIso, p))) ?? ''
 
-    // Backup: exception person if present, else first HOSP; weekends fall back to Friday
-    const exceptionPerson = staffOrder.find(p => getCell(dataIso, p).exception) ?? ''
-    let backupPerson = exceptionPerson || (staffOrder.find(p => isHosp(getCell(dataIso, p))) ?? '')
-    if (!backupPerson && (dow === 0 || dow === 6)) {
-      backupPerson = staffOrder.find(p => {
-        const c = getCell(friIso, p)
-        return c.am === 'hosp' || c.pm === 'hosp'
-      }) ?? ''
-    }
-
-    // Apply backup override (override wins unless exception person present)
-    const ov = overrides[dataIso]
-    if (!exceptionPerson && ov?.backup !== null && ov?.backup !== undefined) {
-      backupPerson = ov.backup
-    }
-
-    const dayCallPerson = exceptionPerson || backupPerson
-
-    // Bariatric: call person if bari+, else backup if bari+, else dropdown
-    let bariPerson = bariatric[callPerson] ? callPerson
-      : bariatric[backupPerson] ? backupPerson
-      : bariCallPerson
-
-    // Apply bari override
-    if (ov?.bari !== null && ov?.bari !== undefined) {
-      bariPerson = ov.bari
-    }
+    // Day call and bari: read directly from daily_coverage
+    const cov = coverage[covIso] ?? { dayCall: '', bari: '' }
 
     summaries.push({
       date: day,
       nightCall: callPerson,
-      dayCall: dayCallPerson,
-      backup: backupPerson,
-      bari: bariPerson,
+      dayCall: cov.dayCall,
+      backup: cov.dayCall,
+      bari: cov.bari,
       closed: dayClosed,
     })
   }

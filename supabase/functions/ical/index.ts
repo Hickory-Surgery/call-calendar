@@ -128,16 +128,14 @@ Deno.serve(async (req) => {
       map[date] = [...(map[date] ?? []), name]
     }
 
-    // Fetch all assignments relevant to on-call or day-call
+    // Fetch all assignments relevant to on-call
     const { data: assignRows } = await sb
       .from('assignments')
-      .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
-      .or('oncall_am.neq.none,oncall_pm.neq.none,exception.eq.true,am.eq.hosp,pm.eq.hosp')
+      .select('date, person_id, oncall_am, oncall_pm')
+      .or('oncall_am.neq.none,oncall_pm.neq.none')
       .order('date')
 
-    const oncallMap:   Record<string, string[]> = {}
-    const dayExcMap:   Record<string, string[]> = {} // exception = day call override
-    const dayHospMap:  Record<string, string[]> = {} // hosp = default day call
+    const oncallMap: Record<string, string[]> = {}
 
     // deno-lint-ignore no-explicit-any
     for (const row of (assignRows ?? []) as any[]) {
@@ -147,43 +145,30 @@ Deno.serve(async (req) => {
       const sunDate = addDay(row.date, 1)
 
       if (dow === 6) {
-        // Saturday row: am slot = Sat, pm slot = Sun
         if (row.oncall_am !== 'none') push(oncallMap, row.date, name)
         if (row.oncall_pm !== 'none') push(oncallMap, sunDate,  name)
-        // Day call — Sat: exception takes priority over hosp
-        if (row.exception)        push(dayExcMap,  row.date, name)
-        else if (row.am === 'hosp') push(dayHospMap, row.date, name)
-        // Day call — Sun: no exception flag; hosp only
-        if (row.pm === 'hosp')    push(dayHospMap, sunDate,  name)
       } else {
         if (row.oncall_am !== 'none' || row.oncall_pm !== 'none') push(oncallMap, row.date, name)
-        // Day call — weekday: exception takes priority over hosp
-        if (row.exception)                          push(dayExcMap,  row.date, name)
-        else if (row.am === 'hosp' || row.pm === 'hosp') push(dayHospMap, row.date, name)
       }
     }
 
-    // Day call: exception people win; fall back to hosp people
-    const dayCallMap: Record<string, string[]> = {}
-    for (const d of new Set([...Object.keys(dayExcMap), ...Object.keys(dayHospMap)])) {
-      dayCallMap[d] = dayExcMap[d]?.length ? dayExcMap[d] : dayHospMap[d]
-    }
+    // Day call and bari: read directly from daily_coverage (computed on every save)
+    const { data: covRows } = await sb
+      .from('daily_coverage')
+      .select('date, day_call_id, bari_id')
 
-    // Bari: weekly designee mapped across Mon–Sun, overridden by coverage_overrides.bari_id
-    const bariMap: Record<string, string> = {}
-    const { data: bariRows } = await sb.from('bari_call').select('week_start, person_id')
+    const dayCallMap: Record<string, string> = {}
+    const bariMap:    Record<string, string> = {}
     // deno-lint-ignore no-explicit-any
-    for (const row of (bariRows ?? []) as any[]) {
-      const name = nameById[row.person_id]
-      if (!name) continue
-      for (let i = 0; i < 7; i++) bariMap[addDay(row.week_start, i)] = name
-    }
-    const { data: bariOvRows } = await sb
-      .from('coverage_overrides').select('date, bari_id').not('bari_id', 'is', null)
-    // deno-lint-ignore no-explicit-any
-    for (const row of (bariOvRows ?? []) as any[]) {
-      const name = nameById[row.bari_id]
-      if (name) bariMap[row.date] = name
+    for (const row of (covRows ?? []) as any[]) {
+      if (row.day_call_id) {
+        const name = nameById[row.day_call_id]
+        if (name) dayCallMap[row.date] = name
+      }
+      if (row.bari_id) {
+        const name = nameById[row.bari_id]
+        if (name) bariMap[row.date] = name
+      }
     }
 
     const allDates = [...new Set([
@@ -192,13 +177,13 @@ Deno.serve(async (req) => {
     const now = icalNow()
     const events: string[] = []
     for (const dateIso of allDates) {
-      const oncallNames  = oncallMap[dateIso]  ?? []
-      const dayCallNames = dayCallMap[dateIso] ?? []
-      const bariName     = bariMap[dateIso]
+      const oncallNames = oncallMap[dateIso]  ?? []
+      const dayCallName = dayCallMap[dateIso]
+      const bariName    = bariMap[dateIso]
       const parts: string[] = []
-      if (oncallNames.length)  parts.push(`On Call: ${oncallNames.join(' · ')}`)
-      if (dayCallNames.length) parts.push(`Day Call: ${dayCallNames.join(' · ')}`)
-      if (bariName)            parts.push(`Bari: ${bariName}`)
+      if (oncallNames.length) parts.push(`On Call: ${oncallNames.join(' · ')}`)
+      if (dayCallName)        parts.push(`Day Call: ${dayCallName}`)
+      if (bariName)           parts.push(`Bari: ${bariName}`)
       events.push(buildEvent(`${dateIso}-oncall@hickory-surgery`, dateIso, parts.join(' | '), now))
     }
 
@@ -234,18 +219,18 @@ Deno.serve(async (req) => {
     return new Response('Error fetching assignments', { status: 500 })
   }
 
-  // Fetch coverage overrides where this person is manually set as backup or bari
+  // Fetch daily_coverage entries where this person is day call or bari
   const { data: ovRows } = await sb
-    .from('coverage_overrides')
-    .select('date, backup_id, bari_id')
-    .or(`backup_id.eq.${staffRow.id},bari_id.eq.${staffRow.id}`)
+    .from('daily_coverage')
+    .select('date, day_call_id, bari_id')
+    .or(`day_call_id.eq.${staffRow.id},bari_id.eq.${staffRow.id}`)
 
-  // Map of dateIso → { backup: bool, bari: bool }
-  const overrideMap: Record<string, { backup: boolean; bari: boolean }> = {}
+  // Map of dateIso → { dayCall: bool, bari: bool }
+  const overrideMap: Record<string, { dayCall: boolean; bari: boolean }> = {}
   for (const ov of ovRows ?? []) {
     overrideMap[ov.date] = {
-      backup: ov.backup_id === staffRow.id,
-      bari:   ov.bari_id   === staffRow.id,
+      dayCall: ov.day_call_id === staffRow.id,
+      bari:    ov.bari_id     === staffRow.id,
     }
   }
 
@@ -253,8 +238,8 @@ Deno.serve(async (req) => {
     const ov = overrideMap[dateIso]
     if (!ov) return ''
     const parts = []
-    if (ov.backup) parts.push('Backup')
-    if (ov.bari)   parts.push('Bari Call')
+    if (ov.dayCall) parts.push('Day Call')
+    if (ov.bari)    parts.push('Bari Call')
     return parts.length ? ' · ' + parts.join(' · ') : ''
   }
 
