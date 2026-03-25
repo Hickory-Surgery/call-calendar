@@ -38,6 +38,7 @@
 
     :root {
       --topbar-h: 56px;
+      --oncall-day:    #B3E5FC;
       --oncall-single: #FFF176;
       --oncall-double: #FFB74D;
       --oncall-exception: #A5D6A7;
@@ -379,8 +380,8 @@
 
     /* Split-weekend out-of-month slot: muted text. :not() ensures oncall pills
        (declared later, same specificity) still override on call days. */
-    .am-val.slot-out:not(.oncall-single):not(.oncall-double):not(.exception),
-    .pm-val.slot-out:not(.oncall-single):not(.oncall-double) {
+    .am-val.slot-out:not(.oncall-day):not(.oncall-single):not(.oncall-double):not(.exception),
+    .pm-val.slot-out:not(.oncall-day):not(.oncall-single):not(.oncall-double) {
       color: #B0BEC5;
     }
 
@@ -411,6 +412,13 @@
       background: rgba(255, 160, 0, 0.08);
     }
 
+    .am-val.oncall-day,
+    .pm-val.oncall-day {
+      background: var(--oncall-day);
+      border: 1px solid #0288D1;
+      padding: 1px 3px;
+    }
+
     .am-val.oncall-single,
     .pm-val.oncall-single {
       background: var(--oncall-single);
@@ -432,12 +440,14 @@
     }
 
     /* Exception green takes priority over oncall color on the AM half */
+    .am-val.oncall-day.exception,
     .am-val.oncall-single.exception,
     .am-val.oncall-double.exception {
       background: var(--oncall-exception);
       border: 1px solid #388E3C;
     }
 
+    .am-val.oncall-day,
     .am-val.oncall-single,
     .am-val.oncall-double,
     .am-val.exception {
@@ -445,6 +455,7 @@
       border-right: none;
     }
 
+    .pm-val.oncall-day,
     .pm-val.oncall-single,
     .pm-val.oncall-double {
       border-radius: 0 2px 2px 0;
@@ -532,6 +543,10 @@
 
     .closed-row:hover {
       filter: brightness(0.9);
+    }
+
+    .closed-row.oncall-day {
+      background: var(--oncall-day);
     }
 
     .closed-row.oncall-single {
@@ -921,6 +936,15 @@
       color: white;
       font-size: 0.78rem;
       font-weight: 700;
+    }
+
+    .cg-btn.active.day {
+      background: var(--oncall-day);
+      border-color: #0288D1;
+    }
+
+    .cg-btn.active.day::after {
+      color: #01396B;
     }
 
     .cg-btn.active.single {
@@ -1867,7 +1891,7 @@
       </div>
       <div class="day-summary" id="daySummary">
         <div class="ds-call-group">
-          <span class="ds-label">On Call:</span>
+          <span class="ds-label">Night Call:</span>
           <span class="ds-value empty" id="ds-call">—</span>
         </div>
         <div class="ds-stack">
@@ -1907,8 +1931,12 @@
     <!-- Legend -->
     <div class="legend">
       <div class="legend-item">
+        <div class="legend-swatch" style="background:var(--oncall-day)"></div>
+        Day call
+      </div>
+      <div class="legend-item">
         <div class="legend-swatch" style="background:var(--oncall-single)"></div>
-        Single call
+        Night call
       </div>
       <div class="legend-item">
         <div class="legend-swatch" style="background:var(--oncall-double)"></div>
@@ -1979,10 +2007,10 @@
           </div>
           <div style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;border-bottom:1px solid #ECEFF1;margin-bottom:10px">
             <div style="flex:1">
-              <div style="font-size:0.82rem;font-weight:600;color:#37474F">On Call &amp; Bari Call feed</div>
-              <div style="font-size:0.72rem;color:#90A4AE">Who is on call and bari call each day</div>
+              <div style="font-size:0.82rem;font-weight:600;color:#37474F">Night Call &amp; Bari Call feed</div>
+              <div style="font-size:0.72rem;color:#90A4AE">Who is on night call and bari call each day</div>
             </div>
-            <button class="sub-btn sub-btn-disabled" id="practiceCallFeedBtn" data-url="" title="Copy subscribe link" aria-label="Copy On Call and Bari Call feed link">&#128197;</button>
+            <button class="sub-btn sub-btn-disabled" id="practiceCallFeedBtn" data-url="" title="Copy subscribe link" aria-label="Copy Night Call and Bari Call feed link">&#128197;</button>
           </div>
           <div class="staff-list" id="staffList"></div>
           <button class="add-btn" id="addStaffBtn">+ Add person</button>
@@ -3455,8 +3483,8 @@
       editState.oncall_am = editState.oncall_pm = val;
     }
 
-    const ONCALL_VALS = ['none', 'single', 'double'];
-    const ONCALL_LABEL = { none: '<u>N</u>o call', single: '<u>S</u>ingle', double: '<u>D</u>ouble' };
+    const ONCALL_VALS = ['none', 'day', 'single', 'double'];
+    const ONCALL_LABEL = { none: '<u>N</u>o call', day: 'Da<u>y</u> Call', single: 'Night Call', double: '<u>D</u>ouble' };
     const ASSIGN_LABEL = { '': '— none —', unavailable: 'unavail' };
 
     function renderChoiceGrid() {
@@ -4091,6 +4119,7 @@
       }
       if (key === 'n') { applySlotOncall('none'); renderChoiceGrid(); return; }
       if (key === 'e') { editState.exception = !editState.exception; renderChoiceGrid(); return; }
+      if (key === 'y') { applySlotOncall('day'); renderChoiceGrid(); return; }
       if (key === 's') { applySlotOncall('single'); renderChoiceGrid(); return; }
       if (key === 'd') { applySlotOncall('double'); renderChoiceGrid(); return; }
     });
