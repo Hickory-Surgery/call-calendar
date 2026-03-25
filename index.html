@@ -1975,7 +1975,14 @@
       <div class="tab-panels">
         <div class="tab-panel" id="tab-staff">
           <div style="font-size:0.78rem; color:#607D8B; margin-bottom:10px;">
-            Tap &#128197; next to a name to copy that person's calendar subscription link, then paste it into Apple Calendar, Google Calendar, or any calendar app that supports webcal subscriptions.
+            Tap &#128197; to copy a calendar subscription link, then paste it into Apple Calendar, Google Calendar, or any calendar app that supports webcal subscriptions.
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 0 10px;border-bottom:1px solid #ECEFF1;margin-bottom:10px">
+            <div style="flex:1">
+              <div style="font-size:0.82rem;font-weight:600;color:#37474F">On Call &amp; Bari Call feed</div>
+              <div style="font-size:0.72rem;color:#90A4AE">Who is on call and bari call each day</div>
+            </div>
+            <button class="sub-btn sub-btn-disabled" id="practiceCallFeedBtn" data-url="" title="Copy subscribe link" aria-label="Copy On Call and Bari Call feed link">&#128197;</button>
           </div>
           <div class="staff-list" id="staffList"></div>
           <button class="add-btn" id="addStaffBtn">+ Add person</button>
@@ -4317,9 +4324,18 @@
     });
 
     // ── Email recipients ───────────────────────────────────────────────────
+    let callFeedToken = '';
+
     async function loadCompanyInfo() {
       const { data } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle();
       if (!data) return;
+      callFeedToken = data.call_feed_token ?? '';
+      const practiceBtn = document.getElementById('practiceCallFeedBtn');
+      if (practiceBtn) {
+        const url = callFeedToken ? `${ICAL_BASE}?mode=oncall&token=${callFeedToken}` : '';
+        practiceBtn.dataset.url = url;
+        practiceBtn.classList.toggle('sub-btn-disabled', !url);
+      }
       document.getElementById('ci-name').value              = data.name                   ?? '';
       document.getElementById('ci-address').value           = data.address                ?? '';
       document.getElementById('ci-phone').value             = data.phone                  ?? '';
@@ -4552,6 +4568,18 @@
         });
       });
     }
+
+    document.getElementById('practiceCallFeedBtn').addEventListener('click', e => {
+      const btn = e.currentTarget;
+      if (btn.classList.contains('sub-btn-disabled')) return;
+      navigator.clipboard.writeText(btn.dataset.url).then(() => {
+        const prev = btn.innerHTML;
+        btn.innerHTML = '✓';
+        btn.classList.add('sub-btn-copied');
+        showToast('Link copied — paste into your calendar app to subscribe.');
+        setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
+      });
+    });
 
     async function fetchDeactivatedStaff() {
       const { data } = await sb.from('staff')

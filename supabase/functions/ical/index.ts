@@ -99,10 +99,11 @@ function buildICal(calName: string, person: string, events: string[]): string {
 
 Deno.serve(async (req) => {
   const url = new URL(req.url)
+  const mode   = url.searchParams.get('mode')?.trim()   // 'oncall' for practice feed
   const person = url.searchParams.get('person')?.trim()
-  const token = url.searchParams.get('token')?.trim()
+  const token  = url.searchParams.get('token')?.trim()
 
-  if (!person || !token) {
+  if (!token || (!person && mode !== 'oncall')) {
     return new Response('Missing person or token', { status: 400 })
   }
 
@@ -110,6 +111,83 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  // ── Practice on-call + bari-call feed ────────────────────────────────────
+  if (mode === 'oncall') {
+    const { data: co } = await sb.from('company_info').select('call_feed_token, name').eq('id', 1).maybeSingle()
+    if (!co?.call_feed_token || token !== co.call_feed_token) {
+      return new Response('Invalid token', { status: 403 })
+    }
+
+    const { data: staffRows } = await sb.from('staff').select('id, short_name').eq('active', true)
+    // deno-lint-ignore no-explicit-any
+    const nameById: Record<string, string> = Object.fromEntries((staffRows ?? []).map((r: any) => [r.id, r.short_name]))
+
+    // dateIso → [shortName, ...] for people who are on-call that day
+    const oncallMap: Record<string, string[]> = {}
+    const { data: assignRows } = await sb
+      .from('assignments')
+      .select('date, person_id, oncall_am, oncall_pm')
+      .or('oncall_am.neq.none,oncall_pm.neq.none')
+      .order('date')
+    // deno-lint-ignore no-explicit-any
+    for (const row of (assignRows ?? []) as any[]) {
+      const name = nameById[row.person_id]
+      if (!name) continue
+      const dow = new Date(row.date + 'T00:00:00Z').getUTCDay()
+      if (dow === 6) {
+        // Saturday row: oncall_am = Sat, oncall_pm = Sun
+        if (row.oncall_am !== 'none') {
+          oncallMap[row.date] = [...(oncallMap[row.date] ?? []), name]
+        }
+        if (row.oncall_pm !== 'none') {
+          const sunDate = addDay(row.date, 1)
+          oncallMap[sunDate] = [...(oncallMap[sunDate] ?? []), name]
+        }
+      } else {
+        oncallMap[row.date] = [...(oncallMap[row.date] ?? []), name]
+      }
+    }
+
+    // dateIso → shortName for the bari-call person (weekly designee)
+    const bariMap: Record<string, string> = {}
+    const { data: bariRows } = await sb.from('bari_call').select('week_start, person_id')
+    // deno-lint-ignore no-explicit-any
+    for (const row of (bariRows ?? []) as any[]) {
+      const name = nameById[row.person_id]
+      if (!name) continue
+      for (let i = 0; i < 7; i++) bariMap[addDay(row.week_start, i)] = name
+    }
+
+    // Override with coverage_overrides.bari_id for specific dates
+    const { data: bariOvRows } = await sb
+      .from('coverage_overrides').select('date, bari_id').not('bari_id', 'is', null)
+    // deno-lint-ignore no-explicit-any
+    for (const row of (bariOvRows ?? []) as any[]) {
+      const name = nameById[row.bari_id]
+      if (name) bariMap[row.date] = name
+    }
+
+    const allDates = [...new Set([...Object.keys(oncallMap), ...Object.keys(bariMap)])].sort()
+    const now = icalNow()
+    const events: string[] = []
+    for (const dateIso of allDates) {
+      const oncallNames = oncallMap[dateIso] ?? []
+      const bariName    = bariMap[dateIso]
+      const parts: string[] = []
+      if (oncallNames.length) parts.push(`On Call: ${oncallNames.join(' · ')}`)
+      if (bariName)           parts.push(`Bari: ${bariName}`)
+      events.push(buildEvent(`${dateIso}-oncall@hickory-surgery`, dateIso, parts.join(' | '), now))
+    }
+
+    const calName = (co.name ?? 'Practice') + ' On Call & Bari'
+    return new Response(buildICal(calName, 'oncall', events), {
+      headers: {
+        'Content-Type': 'text/calendar; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="oncall.ics"',
+      },
+    })
+  }
 
   // Validate token
   const { data: staffRow, error: staffErr } = await sb
