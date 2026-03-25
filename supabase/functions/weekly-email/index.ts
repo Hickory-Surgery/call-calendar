@@ -215,14 +215,13 @@ Deno.serve(async (req) => {
     if (s.closed) {
       return `<tr>
         <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1;font-weight:500">${fmtDay(s.date)}</td>
-        <td colspan="4" style="padding:8px 12px;border-bottom:1px solid #ECEFF1;color:#90A4AE;font-style:italic">CLOSED</td>
+        <td colspan="3" style="padding:8px 12px;border-bottom:1px solid #ECEFF1;color:#90A4AE;font-style:italic">CLOSED</td>
       </tr>`
     }
     return `<tr>
       <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1;font-weight:500">${fmtDay(s.date)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.onCall)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.weekdayCall)}</td>
-      <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.backup)}</td>
       <td style="padding:8px 12px;border-bottom:1px solid #ECEFF1">${cell(s.bari)}</td>
     </tr>`
   }).join('\n')
@@ -253,7 +252,6 @@ Deno.serve(async (req) => {
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Day</th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">On Call</th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Weekday Call</th>
-        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Backup</th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Bariatric</th>
       </tr>
     </thead>
@@ -269,13 +267,13 @@ Deno.serve(async (req) => {
   const text = [
     `Call Schedule — ${weekLabel}`,
     '',
-    'Day              On Call       Weekday Call  Backup        Bariatric',
-    '─'.repeat(70),
+    'Day              On Call       Weekday Call  Bariatric',
+    '─'.repeat(56),
     ...summaries.map(s => {
       const day = fmtDay(s.date).padEnd(17)
       if (s.closed) return `${day}CLOSED`
       const dn = (n: string) => (n ? displayName(n) : '—')
-      return `${day}${dn(s.onCall).padEnd(14)}${dn(s.weekdayCall).padEnd(14)}${dn(s.backup).padEnd(14)}${dn(s.bari)}`
+      return `${day}${dn(s.onCall).padEnd(14)}${dn(s.weekdayCall).padEnd(14)}${dn(s.bari)}`
     }),
   ].join('\n')
 
