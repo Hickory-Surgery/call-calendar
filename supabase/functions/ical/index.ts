@@ -124,27 +124,52 @@ Deno.serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const nameById: Record<string, string> = Object.fromEntries((staffRows ?? []).map((r: any) => [r.id, r.short_name]))
 
-    // dateIso → [shortName, ...] for people who are on-call that day
-    const oncallMap: Record<string, string[]> = {}
+    function push(map: Record<string, string[]>, date: string, name: string) {
+      map[date] = [...(map[date] ?? []), name]
+    }
+
+    // Fetch all assignments relevant to on-call or day-call
     const { data: assignRows } = await sb
       .from('assignments')
-      .select('date, person_id, oncall_am, oncall_pm')
-      .or('oncall_am.neq.none,oncall_pm.neq.none')
+      .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
+      .or('oncall_am.neq.none,oncall_pm.neq.none,exception.eq.true,am.eq.hosp,pm.eq.hosp')
       .order('date')
+
+    const oncallMap:   Record<string, string[]> = {}
+    const dayExcMap:   Record<string, string[]> = {} // exception = day call override
+    const dayHospMap:  Record<string, string[]> = {} // hosp = default day call
+
     // deno-lint-ignore no-explicit-any
     for (const row of (assignRows ?? []) as any[]) {
       const name = nameById[row.person_id]
       if (!name) continue
       const dow = new Date(row.date + 'T00:00:00Z').getUTCDay()
+      const sunDate = addDay(row.date, 1)
+
       if (dow === 6) {
-        if (row.oncall_am !== 'none') oncallMap[row.date]             = [...(oncallMap[row.date]             ?? []), name]
-        if (row.oncall_pm !== 'none') oncallMap[addDay(row.date, 1)]  = [...(oncallMap[addDay(row.date, 1)]  ?? []), name]
+        // Saturday row: am slot = Sat, pm slot = Sun
+        if (row.oncall_am !== 'none') push(oncallMap, row.date, name)
+        if (row.oncall_pm !== 'none') push(oncallMap, sunDate,  name)
+        // Day call — Sat: exception takes priority over hosp
+        if (row.exception)        push(dayExcMap,  row.date, name)
+        else if (row.am === 'hosp') push(dayHospMap, row.date, name)
+        // Day call — Sun: no exception flag; hosp only
+        if (row.pm === 'hosp')    push(dayHospMap, sunDate,  name)
       } else {
-        oncallMap[row.date] = [...(oncallMap[row.date] ?? []), name]
+        if (row.oncall_am !== 'none' || row.oncall_pm !== 'none') push(oncallMap, row.date, name)
+        // Day call — weekday: exception takes priority over hosp
+        if (row.exception)                          push(dayExcMap,  row.date, name)
+        else if (row.am === 'hosp' || row.pm === 'hosp') push(dayHospMap, row.date, name)
       }
     }
 
-    // dateIso → shortName for the bari-call person (weekly designee)
+    // Day call: exception people win; fall back to hosp people
+    const dayCallMap: Record<string, string[]> = {}
+    for (const d of new Set([...Object.keys(dayExcMap), ...Object.keys(dayHospMap)])) {
+      dayCallMap[d] = dayExcMap[d]?.length ? dayExcMap[d] : dayHospMap[d]
+    }
+
+    // Bari: weekly designee mapped across Mon–Sun, overridden by coverage_overrides.bari_id
     const bariMap: Record<string, string> = {}
     const { data: bariRows } = await sb.from('bari_call').select('week_start, person_id')
     // deno-lint-ignore no-explicit-any
@@ -153,8 +178,6 @@ Deno.serve(async (req) => {
       if (!name) continue
       for (let i = 0; i < 7; i++) bariMap[addDay(row.week_start, i)] = name
     }
-
-    // Override with coverage_overrides.bari_id for specific dates
     const { data: bariOvRows } = await sb
       .from('coverage_overrides').select('date, bari_id').not('bari_id', 'is', null)
     // deno-lint-ignore no-explicit-any
@@ -163,15 +186,19 @@ Deno.serve(async (req) => {
       if (name) bariMap[row.date] = name
     }
 
-    const allDates = [...new Set([...Object.keys(oncallMap), ...Object.keys(bariMap)])].sort()
+    const allDates = [...new Set([
+      ...Object.keys(oncallMap), ...Object.keys(dayCallMap), ...Object.keys(bariMap),
+    ])].sort()
     const now = icalNow()
     const events: string[] = []
     for (const dateIso of allDates) {
-      const oncallNames = oncallMap[dateIso] ?? []
-      const bariName    = bariMap[dateIso]
+      const oncallNames  = oncallMap[dateIso]  ?? []
+      const dayCallNames = dayCallMap[dateIso] ?? []
+      const bariName     = bariMap[dateIso]
       const parts: string[] = []
-      if (oncallNames.length) parts.push(`On Call: ${oncallNames.join(' · ')}`)
-      if (bariName)           parts.push(`Bari: ${bariName}`)
+      if (oncallNames.length)  parts.push(`On Call: ${oncallNames.join(' · ')}`)
+      if (dayCallNames.length) parts.push(`Day Call: ${dayCallNames.join(' · ')}`)
+      if (bariName)            parts.push(`Bari: ${bariName}`)
       events.push(buildEvent(`${dateIso}-oncall@hickory-surgery`, dateIso, parts.join(' | '), now))
     }
 
