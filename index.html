@@ -729,6 +729,13 @@
       overflow-y: auto;
     }
 
+    #settingsOverlay .sheet {
+      height: 88vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
     .sheet-handle {
       width: 56px;
       height: 20px;
@@ -951,6 +958,7 @@
       display: flex;
       gap: 10px;
       margin-top: 20px;
+      flex-shrink: 0;
     }
 
     .btn {
@@ -1153,6 +1161,7 @@
       gap: 0;
       margin-bottom: 16px;
       border-bottom: 2px solid #ECEFF1;
+      flex-shrink: 0;
     }
 
     .tab-btn {
@@ -1182,6 +1191,8 @@
     .tab-panels {
       display: grid;
       overflow: hidden;
+      flex: 1;
+      min-height: 0;
     }
 
     .tab-panel {
@@ -1190,11 +1201,18 @@
       width: 100%;
       visibility: hidden;
       pointer-events: none;
+      overflow-y: auto;
     }
 
     .tab-panel.active {
       visibility: visible;
       pointer-events: auto;
+    }
+
+    #tab-log {
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
     }
 
     .remove-btn:disabled {
@@ -1604,7 +1622,8 @@
 
     .audit-log-list {
       overflow-y: auto;
-      max-height: 340px;
+      flex: 1;
+      min-height: 0;
       border: 1px solid #E0E7EF;
       border-radius: 6px;
     }
@@ -1988,7 +2007,7 @@
           <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
 
           <div class="email-recipients-section editor-only" id="emailRecipientsSection">
-            <div class="rates-section-title" id="recipientsToggle" style="cursor:pointer;user-select:none">Weekly Email Recipients ›</div>
+            <div class="rates-section-title" id="recipientsToggle" style="cursor:pointer;user-select:none">Weekly Email Settings ›</div>
             <div id="recipientsBody" style="display:none">
               <div class="recipient-list" id="recipientList"></div>
               <div class="recipient-add-row">
@@ -4275,7 +4294,7 @@
       const body = document.getElementById('recipientsBody');
       const open = body.style.display !== 'none';
       body.style.display = open ? 'none' : '';
-      document.getElementById('recipientsToggle').textContent = open ? 'Weekly Email Recipients ›' : 'Weekly Email Recipients ↓';
+      document.getElementById('recipientsToggle').textContent = open ? 'Weekly Email Settings ›' : 'Weekly Email Settings ↓';
     });
 
     document.getElementById('ratesToggle').addEventListener('click', () => {
