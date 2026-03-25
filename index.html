@@ -729,8 +729,8 @@
       overflow-y: auto;
     }
 
-    #settingsOverlay .sheet.log-active {
-      height: 88vh;
+    #settingsOverlay .sheet {
+      height: 600px;
       overflow: hidden;
       display: flex;
       flex-direction: column;
@@ -1190,7 +1190,7 @@
 
     .tab-panels {
       display: grid;
-      overflow: hidden;
+      overflow-y: auto;
       flex: 1;
       min-height: 0;
     }
@@ -1201,7 +1201,6 @@
       width: 100%;
       visibility: hidden;
       pointer-events: none;
-      overflow-y: auto;
     }
 
     .tab-panel.active {
@@ -4099,7 +4098,6 @@
       document.querySelectorAll('.tab-panel').forEach(panel => {
         panel.classList.toggle('active', panel.id === `tab-${tabName}`);
       });
-      document.querySelector('#settingsOverlay .sheet').classList.toggle('log-active', tabName === 'log');
     }
 
     function openSettings() {
