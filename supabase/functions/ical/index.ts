@@ -134,30 +134,65 @@ Deno.serve(async (req) => {
     return new Response('Error fetching assignments', { status: 500 })
   }
 
+  // Fetch coverage overrides where this person is manually set as backup or bari
+  const { data: ovRows } = await sb
+    .from('coverage_overrides')
+    .select('date, backup_id, bari_id')
+    .or(`backup_id.eq.${staffRow.id},bari_id.eq.${staffRow.id}`)
+
+  // Map of dateIso → { backup: bool, bari: bool }
+  const overrideMap: Record<string, { backup: boolean; bari: boolean }> = {}
+  for (const ov of ovRows ?? []) {
+    overrideMap[ov.date] = {
+      backup: ov.backup_id === staffRow.id,
+      bari:   ov.bari_id   === staffRow.id,
+    }
+  }
+
+  function overrideSuffix(dateIso: string): string {
+    const ov = overrideMap[dateIso]
+    if (!ov) return ''
+    const parts = []
+    if (ov.backup) parts.push('Backup')
+    if (ov.bari)   parts.push('Bari Call')
+    return parts.length ? ' · ' + parts.join(' · ') : ''
+  }
+
   const now = icalNow()
   const events: string[] = []
+  const assignmentDates = new Set<string>()
 
   for (const row of (rows as AssignmentRow[]) ?? []) {
     const dow = new Date(row.date + 'T00:00:00Z').getUTCDay() // 0=Sun, 6=Sat
 
     if (dow === 6) {
       // Saturday date: am = Saturday assignment, pm = Sunday assignment
-      const satSummary = makeSummary(row.am, row.am, row.oncall_am, row.oncall_am, row.exception)
-      if (row.am || row.oncall_am !== 'none') {
+      const sunDate = addDay(row.date, 1)
+      assignmentDates.add(row.date)
+      assignmentDates.add(sunDate)
+      const satSummary = makeSummary(row.am, row.am, row.oncall_am, row.oncall_am, row.exception) + overrideSuffix(row.date)
+      if (row.am || row.oncall_am !== 'none' || overrideMap[row.date]) {
         events.push(buildEvent(`${row.date}-${person}-sat@hickory-surgery`, row.date, satSummary, now))
       }
-      if (row.pm || row.oncall_pm !== 'none') {
-        const sunDate = addDay(row.date, 1)
-        const sunSummary = makeSummary(row.pm, row.pm, row.oncall_pm, row.oncall_pm, false)
+      const sunSummary = makeSummary(row.pm, row.pm, row.oncall_pm, row.oncall_pm, false) + overrideSuffix(sunDate)
+      if (row.pm || row.oncall_pm !== 'none' || overrideMap[sunDate]) {
         events.push(buildEvent(`${sunDate}-${person}-sun@hickory-surgery`, sunDate, sunSummary, now))
       }
     } else {
       // Weekday
-      const summary = makeSummary(row.am, row.pm, row.oncall_am, row.oncall_pm, row.exception)
-      if (row.am || row.pm || row.oncall_am !== 'none' || row.oncall_pm !== 'none') {
+      assignmentDates.add(row.date)
+      const summary = makeSummary(row.am, row.pm, row.oncall_am, row.oncall_pm, row.exception) + overrideSuffix(row.date)
+      if (row.am || row.pm || row.oncall_am !== 'none' || row.oncall_pm !== 'none' || overrideMap[row.date]) {
         events.push(buildEvent(`${row.date}-${person}@hickory-surgery`, row.date, summary, now))
       }
     }
+  }
+
+  // Standalone events for override dates with no assignment (edge case)
+  for (const dateIso of Object.keys(overrideMap)) {
+    if (assignmentDates.has(dateIso)) continue
+    const suffix = overrideSuffix(dateIso).slice(3) // strip leading ' · '
+    events.push(buildEvent(`${dateIso}-${person}-ov@hickory-surgery`, dateIso, suffix, now))
   }
 
   const displayName = staffRow.display_name || staffRow.short_name

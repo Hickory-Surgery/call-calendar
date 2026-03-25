@@ -48,14 +48,47 @@ Deno.serve(async (req) => {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
 
+  // ── Fetch company info ────────────────────────────────────────────────────
+  const { data: co } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle()
+
+  // ── Schedule check (skip if not the right day/time window) ───────────────
+  const now = new Date()
+  const forceSend = req.headers.get('x-force-send') === '1'
+  if (!forceSend) {
+    // If no schedule configured, refuse to send (must force)
+    if (co?.email_day == null || !co?.email_time) {
+      console.log('No schedule configured — set email_day and email_time in Practice settings')
+      return new Response('No schedule configured', { status: 200 })
+    }
+    // Check day of week (UTC)
+    if (now.getUTCDay() !== co.email_day) {
+      console.log(`Not send day (today=${now.getUTCDay()}, configured=${co.email_day})`)
+      return new Response('Not send day', { status: 200 })
+    }
+    // Check time window: within 29 minutes of configured time (tolerates 30-min cron intervals)
+    const [schedHH, schedMM] = (co.email_time as string).slice(0, 5).split(':').map(Number)
+    const schedMinutes = schedHH * 60 + schedMM
+    const nowMinutes   = now.getUTCHours() * 60 + now.getUTCMinutes()
+    if (nowMinutes < schedMinutes || nowMinutes >= schedMinutes + 29) {
+      console.log(`Outside time window (now=${nowMinutes}, sched=${schedMinutes})`)
+      return new Response('Outside time window', { status: 200 })
+    }
+    // Deduplication: skip if already sent within the last 6 hours
+    if (co.email_last_sent) {
+      const lastSent = new Date(co.email_last_sent)
+      const hoursSince = (now.getTime() - lastSent.getTime()) / 3_600_000
+      if (hoursSince < 6) {
+        console.log(`Already sent ${hoursSince.toFixed(1)}h ago — skipping`)
+        return new Response('Already sent recently', { status: 200 })
+      }
+    }
+  }
+
   // ── Compute next week Mon–Sun ─────────────────────────────────────────────
-  const monday = nextMonday(new Date())
+  const monday = nextMonday(now)
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i))
   // days[0]=Mon … days[5]=Sat, days[6]=Sun
   const saturday = days[5]
-
-  // ── Fetch company info ────────────────────────────────────────────────────
-  const { data: co } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle()
 
   // ── Fetch staff ───────────────────────────────────────────────────────────
   const { data: staffRows, error: staffErr } = await sb
@@ -314,6 +347,10 @@ Deno.serve(async (req) => {
 
   const body = await res.json()
   console.log('Resend:', res.status, JSON.stringify(body))
+
+  if (res.ok) {
+    await sb.from('company_info').update({ email_last_sent: now.toISOString() }).eq('id', 1)
+  }
 
   return new Response(res.ok ? 'OK' : 'Email failed', { status: res.ok ? 200 : 500 })
 })

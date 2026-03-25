@@ -1995,7 +1995,26 @@
                 <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off">
                 <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
               </div>
-              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated Friday schedule email.</div>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated weekly schedule email.</div>
+              <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
+                <label class="ci-label" style="flex:1;min-width:120px">Send day
+                  <select id="ci-email-day" class="ci-input">
+                    <option value="">— disabled —</option>
+                    <option value="0">Sunday</option>
+                    <option value="1">Monday</option>
+                    <option value="2">Tuesday</option>
+                    <option value="3">Wednesday</option>
+                    <option value="4">Thursday</option>
+                    <option value="5">Friday</option>
+                    <option value="6">Saturday</option>
+                  </select>
+                </label>
+                <label class="ci-label" style="flex:1;min-width:100px">Time (UTC)
+                  <input type="time" id="ci-email-time" class="ci-input">
+                </label>
+              </div>
+              <div id="ci-schedule-hint" style="font-size:0.72rem;color:#90A4AE;margin-top:4px"></div>
+              <button class="data-btn" id="ciScheduleSaveBtn" style="margin-top:6px">&#x2713; Save schedule</button>
             </div>
           </div>
 
@@ -4291,6 +4310,11 @@
       document.getElementById('ci-scheduling-coord').value  = data.scheduling_coordinator ?? '';
       document.getElementById('ci-logo-url').value          = data.logo_url               ?? '';
       renderLogoPreview(data.logo_url);
+      const dayEl  = document.getElementById('ci-email-day');
+      const timeEl = document.getElementById('ci-email-time');
+      dayEl.value  = data.email_day  != null ? String(data.email_day) : '';
+      timeEl.value = data.email_time ? data.email_time.slice(0, 5) : '';
+      renderScheduleHint();
     }
 
     function renderLogoPreview(url) {
@@ -4299,6 +4323,23 @@
     }
 
     document.getElementById('ci-logo-url').addEventListener('input', e => renderLogoPreview(e.target.value.trim()));
+
+    const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    function renderScheduleHint() {
+      const hint = document.getElementById('ci-schedule-hint');
+      const dayVal  = document.getElementById('ci-email-day').value;
+      const timeVal = document.getElementById('ci-email-time').value;
+      if (!dayVal || !timeVal) { hint.textContent = dayVal || timeVal ? 'Set both day and time to enable.' : ''; return; }
+      const [hh, mm] = timeVal.split(':').map(Number);
+      const utcLabel = `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')} UTC`;
+      // Show local time equivalent
+      const now = new Date();
+      const ref = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), hh, mm));
+      const localLabel = ref.toLocaleTimeString([], { hour:'numeric', minute:'2-digit' });
+      hint.textContent = `Sends every ${DOW_NAMES[dayVal]} at ${utcLabel} (${localLabel} local)`;
+    }
+    document.getElementById('ci-email-day').addEventListener('change', renderScheduleHint);
+    document.getElementById('ci-email-time').addEventListener('input', renderScheduleHint);
 
     document.getElementById('ciSaveBtn').addEventListener('click', async () => {
       const payload = {
@@ -4314,6 +4355,19 @@
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
       showToast('Practice info saved.');
+    });
+
+    document.getElementById('ciScheduleSaveBtn').addEventListener('click', async () => {
+      const dayVal  = document.getElementById('ci-email-day').value;
+      const timeVal = document.getElementById('ci-email-time').value;
+      const payload = {
+        email_day:  dayVal !== '' ? parseInt(dayVal, 10) : null,
+        email_time: timeVal || null,
+        updated_at: new Date().toISOString(),
+      };
+      const { error } = await sb.from('company_info').update(payload).eq('id', 1);
+      if (error) { showToast('Save failed — please try again.'); return; }
+      showToast('Schedule saved.');
     });
 
     async function loadRecipients() {
