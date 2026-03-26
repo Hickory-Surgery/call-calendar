@@ -2327,6 +2327,7 @@
         return null;
       })();
       scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
+      if (!savedPos && window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
     }
 
     async function applySession(session) {
@@ -2371,6 +2372,7 @@
         return null;
       })();
       scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
+      if (!savedPos && window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
     }
 
     // Initial load: check for a stored session
@@ -3263,6 +3265,15 @@
       }
       ensureHeadroom(y, m);
       scrollSecToTop(document.getElementById(`month-${y}-${m}`), 'instant');
+    }
+
+    function scrollToCurrentWeek() {
+      const todayCell = document.querySelector('.day-cell.today');
+      if (!todayCell) return;
+      const app = getApp();
+      const sticky = document.querySelector('.day-headers').getBoundingClientRect().bottom;
+      const rect = todayCell.getBoundingClientRect();
+      app.scrollTop += rect.top - sticky;
     }
 
     function initScroll(y, m) {
