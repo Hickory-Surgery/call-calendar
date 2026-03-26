@@ -2485,11 +2485,9 @@
     }
 
     async function fetchAssignments() {
-      const { data: rows, error } = await sb.from('assignments').select('*');
+      const { data: rows, error } = await sb.from('assignments').select('*').limit(5000);
       if (error) { console.error('fetchAssignments error:', error); return; }
-      const jun1Raw = (rows ?? []).filter(r => r.date === '2026-06-01');
-      if (jun1Raw.length) console.log('[fetchAssignments] Raw June 1 rows from DB:', JSON.stringify(jun1Raw));
-      else console.warn('[fetchAssignments] No rows returned for 2026-06-01');
+      if ((rows?.length ?? 0) >= 1000) console.warn(`[fetchAssignments] Received ${rows.length} rows — possible truncation at 1000-row default limit (now using limit 5000)`);
       data = {};
       for (const row of rows) {
         const staffRow = staffById[row.person_id];
