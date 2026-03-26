@@ -2503,12 +2503,13 @@
     }
 
     async function fetchDailyCoverage() {
-      const { data: rows } = await sb.from('daily_coverage').select('date, day_call_id, bari_id');
+      const { data: rows } = await sb.from('daily_coverage').select('date, day_call_id, bari_id, updated_by');
       dailyCoverage = {};
       for (const row of rows ?? []) {
         dailyCoverage[row.date] = {
-          dayCall: row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : null,
-          bari:    row.bari_id     ? (staffById[row.bari_id]?.short_name     ?? '') : null,
+          dayCall:   row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : null,
+          bari:      row.bari_id     ? (staffById[row.bari_id]?.short_name     ?? '') : null,
+          isManual:  !!row.updated_by,
         };
       }
     }
@@ -2764,8 +2765,9 @@
             delete dailyCoverage[dateIso];
           } else {
             dailyCoverage[dateIso] = {
-              dayCall: n.day_call_id ? (staffById[n.day_call_id]?.short_name ?? '') : null,
-              bari:    n.bari_id     ? (staffById[n.bari_id]?.short_name     ?? '') : null,
+              dayCall:  n.day_call_id ? (staffById[n.day_call_id]?.short_name ?? '') : null,
+              bari:     n.bari_id     ? (staffById[n.bari_id]?.short_name     ?? '') : null,
+              isManual: !!n.updated_by,
             };
           }
           render();
@@ -2977,12 +2979,14 @@
             date:        iso,
             day_call_id: dayCallRow?.id ?? null,
             bari_id:     bariRow?.id    ?? null,
+            updated_by:  null,
             updated_at:  new Date().toISOString(),
           }).then(({ error }) => {
             if (!error) {
               dailyCoverage[iso] = {
-                dayCall: computedDayCall || null,
-                bari:    bariName || null,
+                dayCall:  computedDayCall || null,
+                bari:     bariName || null,
+                isManual: false,
               };
             }
           });
@@ -3477,8 +3481,8 @@
       const satOv = dailyCoverage[isoFromParts(y, m, d)];
       const sunOv = weekend ? dailyCoverage[isoFromParts(y, m, d + 1)] : null;
       const ovCls = !nameHidden && (
-        (satOv && (satOv.dayCall === person || satOv.bari === person)) ||
-        (sunOv && (sunOv.dayCall === person || sunOv.bari === person))
+        (satOv?.isManual && (satOv.dayCall === person || satOv.bari === person)) ||
+        (sunOv?.isManual && (sunOv.dayCall === person || sunOv.bari === person))
       ) ? ' date-has-override' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
@@ -3847,12 +3851,12 @@
         const { backupVal: sunBkp, bariVal: sunBari } = readRow('sun');
         const [r1, r2] = await Promise.all([upsertRow(satISO, satBkp, satBari), upsertRow(sunISO, sunBkp, sunBari)]);
         if (r1.error || r2.error) { showToast('Save failed — please try again.'); return; }
-        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null };
-        dailyCoverage[sunISO] = { dayCall: sunBkp || null, bari: sunBari || null };
+        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null, isManual: true };
+        dailyCoverage[sunISO] = { dayCall: sunBkp || null, bari: sunBari || null, isManual: true };
       } else {
         const { error } = await upsertRow(satISO, satBkp, satBari);
         if (error) { showToast('Save failed — please try again.'); return; }
-        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null };
+        dailyCoverage[satISO] = { dayCall: satBkp || null, bari: satBari || null, isManual: true };
       }
       render();
       closeCoverageEdit();
