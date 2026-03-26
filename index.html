@@ -3274,12 +3274,16 @@
     function scrollToCurrentWeek() {
       const todayCell = document.querySelector('.day-cell.today');
       if (!todayCell) return;
+      const monthSec = todayCell.closest('.month-section');
+      if (!monthSec) return;
       const app = getApp();
-      // Walk offsetParent chain to get the cell's absolute position within .app,
-      // then subtract the actual sticky area height (topbar may be taller on phones).
-      let top = 0, el = todayCell;
-      while (el && el !== app) { top += el.offsetTop; el = el.offsetParent; }
-      app.scrollTop = top - stickyOffset();
+      // 1. Month section's absolute position from .app top (layout-based, scroll-independent).
+      let secTop = 0, el = monthSec;
+      while (el && el !== app) { secTop += el.offsetTop; el = el.offsetParent; }
+      // 2. Today cell's offset within the month section (relative BCR delta — scroll-independent).
+      const relativeTop = todayCell.getBoundingClientRect().top - monthSec.getBoundingClientRect().top;
+      // Position: month section top at sticky bottom, then shift down to today's row.
+      app.scrollTop = secTop - stickyOffset() + relativeTop;
     }
 
     function initScroll(y, m) {
@@ -5184,7 +5188,7 @@
 
     document.getElementById('todayBtn').addEventListener('click', () => {
       scrollToMonth(today.getFullYear(), today.getMonth());
-      if (window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
+      requestAnimationFrame(scrollToCurrentWeek);
     });
 
     let prevInnerWidth = window.innerWidth;
