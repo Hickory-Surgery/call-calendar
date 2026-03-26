@@ -3917,9 +3917,15 @@
           `On-call conflict with: ${names}.\n\nAccept to reassign call to ${person} and clear the conflict, or Cancel to go back.`
         );
         if (!ok) return false;
-        for (const { p, col } of conflicts) {
+        // Group by person so each person gets one setCell (avoids async upsert race on weekend rows)
+        const byPerson = {};
+        for (const { p, col } of conflicts) { (byPerson[p] = byPerson[p] || []).push(col); }
+        for (const [p, cols] of Object.entries(byPerson)) {
           const c = getCell(y, m, d, p);
-          setCell(y, m, d, p, { ...c, [col === 'AM' ? 'oncall_am' : 'oncall_pm']: 'none' });
+          const updates = {};
+          if (cols.includes('AM')) updates.oncall_am = 'none';
+          if (cols.includes('PM')) updates.oncall_pm = 'none';
+          setCell(y, m, d, p, { ...c, ...updates });
         }
       }
 
@@ -3937,9 +3943,15 @@
           `Hosp conflict with: ${names}.\n\nAccept to reassign hosp to ${person} and clear the conflict, or Cancel to go back.`
         );
         if (!ok) return false;
-        for (const { p, col } of hospConflicts) {
+        // Group by person to avoid race condition on weekend rows
+        const byPerson = {};
+        for (const { p, col } of hospConflicts) { (byPerson[p] = byPerson[p] || []).push(col); }
+        for (const [p, cols] of Object.entries(byPerson)) {
           const c = getCell(y, m, d, p);
-          setCell(y, m, d, p, { ...c, [col === 'AM' ? 'am' : 'pm']: '' });
+          const updates = {};
+          if (cols.includes('AM')) updates.am = '';
+          if (cols.includes('PM')) updates.pm = '';
+          setCell(y, m, d, p, { ...c, ...updates });
         }
       }
 
