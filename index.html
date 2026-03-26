@@ -2326,8 +2326,10 @@
         } catch {}
         return null;
       })();
-      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
-      if (!savedPos && window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
+      const smallScreen = window.innerWidth < 640;
+      scrollToMonth(smallScreen ? today.getFullYear() : (savedPos ? savedPos.y : today.getFullYear()),
+                    smallScreen ? today.getMonth()    : (savedPos ? savedPos.m : today.getMonth()));
+      if (smallScreen) requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentWeek));
     }
 
     async function applySession(session) {
@@ -2371,8 +2373,10 @@
         } catch {}
         return null;
       })();
-      scrollToMonth(savedPos ? savedPos.y : today.getFullYear(), savedPos ? savedPos.m : today.getMonth());
-      if (!savedPos && window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
+      const smallScreen = window.innerWidth < 640;
+      scrollToMonth(smallScreen ? today.getFullYear() : (savedPos ? savedPos.y : today.getFullYear()),
+                    smallScreen ? today.getMonth()    : (savedPos ? savedPos.m : today.getMonth()));
+      if (smallScreen) requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentWeek));
     }
 
     // Initial load: check for a stored session
