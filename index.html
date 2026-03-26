@@ -1213,29 +1213,28 @@
     }
 
     .tab-panels {
-      display: grid;
       overflow-y: auto;
       flex: 1;
       min-height: 0;
     }
 
     .tab-panel {
-      grid-area: 1 / 1;
+      display: none;
       min-width: 0;
       width: 100%;
-      visibility: hidden;
-      pointer-events: none;
     }
 
     .tab-panel.active {
-      visibility: visible;
-      pointer-events: auto;
+      display: block;
     }
 
     #tab-log {
-      display: flex;
       flex-direction: column;
       overflow: visible;
+    }
+
+    #tab-log.active {
+      display: flex;
     }
 
     .remove-btn:disabled {
