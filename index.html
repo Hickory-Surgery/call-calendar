@@ -2329,7 +2329,7 @@
       const smallScreen = window.innerWidth < 640;
       scrollToMonth(smallScreen ? today.getFullYear() : (savedPos ? savedPos.y : today.getFullYear()),
                     smallScreen ? today.getMonth()    : (savedPos ? savedPos.m : today.getMonth()));
-      if (smallScreen) requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentWeek));
+      if (smallScreen) requestAnimationFrame(scrollToCurrentWeek);
     }
 
     async function applySession(session) {
@@ -2376,7 +2376,7 @@
       const smallScreen = window.innerWidth < 640;
       scrollToMonth(smallScreen ? today.getFullYear() : (savedPos ? savedPos.y : today.getFullYear()),
                     smallScreen ? today.getMonth()    : (savedPos ? savedPos.m : today.getMonth()));
-      if (smallScreen) requestAnimationFrame(() => requestAnimationFrame(scrollToCurrentWeek));
+      if (smallScreen) requestAnimationFrame(scrollToCurrentWeek);
     }
 
     // Initial load: check for a stored session
@@ -3275,9 +3275,11 @@
       const todayCell = document.querySelector('.day-cell.today');
       if (!todayCell) return;
       const app = getApp();
-      const sticky = document.querySelector('.day-headers').getBoundingClientRect().bottom;
-      const rect = todayCell.getBoundingClientRect();
-      app.scrollTop += rect.top - sticky;
+      // Walk offsetParent chain to get the cell's absolute position within .app,
+      // then subtract the actual sticky area height (topbar may be taller on phones).
+      let top = 0, el = todayCell;
+      while (el && el !== app) { top += el.offsetTop; el = el.offsetParent; }
+      app.scrollTop = top - stickyOffset();
     }
 
     function initScroll(y, m) {
