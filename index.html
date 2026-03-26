@@ -2490,16 +2490,25 @@
       data = {};
       for (const row of rows) {
         const staffRow = staffById[row.person_id];
-        if (!staffRow) continue;
+        if (!staffRow) {
+          console.warn(`fetchAssignments: skipping row — person_id ${row.person_id} not in active staff (date: ${row.date})`);
+          continue;
+        }
         const { y, m, d } = isoToDateParts(row.date);
-        data[cellKey(y, m, d, staffRow.short_name)] = {
+        const cell = {
           am: row.am,
           pm: row.pm,
           oncall_am: row.oncall_am,
           oncall_pm: row.oncall_pm,
           exception: row.exception,
         };
+        const key = cellKey(y, m, d, staffRow.short_name);
+        if (data[key]) console.warn(`fetchAssignments: duplicate key ${key} — overwriting`, data[key], 'with', cell);
+        data[key] = cell;
       }
+      // DEBUG: log any June 2026 entries (remove once blank-cell bug is diagnosed)
+      const debugEntries = Object.entries(data).filter(([k]) => k.startsWith('2026-6-'));
+      if (debugEntries.length) console.log('[fetchAssignments] June 2026 entries:', Object.fromEntries(debugEntries));
     }
 
     async function fetchDailyCoverage() {
@@ -3523,6 +3532,7 @@
     //  Edit modal
     // ─────────────────────────────────────────────
     let editState = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false };
+    let editCellInMemory = false; // true if data[key] was loaded from DB when edit was opened
 
     // Apply a value to both slots (label clicks and keyboard shortcuts set both Sat and Sun together).
     function applySlotVal(val) {
@@ -3712,6 +3722,7 @@
     function openEdit(y, m, d, person, slot = null) {
       if (!personEditableOnDate(person, y, m, d)) return;
       editing = { y, m, d, person, slot };
+      editCellInMemory = data[cellKey(y, m, d, person)] !== undefined;
       const cell = getCell(y, m, d, person);
 
       let titleStr;
@@ -3927,15 +3938,26 @@
           `On-call conflict with: ${names}.\n\nAccept to reassign call to ${person} and clear the conflict, or Cancel to go back.`
         );
         if (!ok) return false;
-        // Group by person so each person gets one setCell (avoids async upsert race on weekend rows)
+        // Group by person so each person gets one update (avoids async race on weekend rows)
         const byPerson = {};
         for (const { p, col } of conflicts) { (byPerson[p] = byPerson[p] || []).push(col); }
         for (const [p, cols] of Object.entries(byPerson)) {
-          const c = getCell(y, m, d, p);
-          const updates = {};
-          if (cols.includes('AM')) updates.oncall_am = 'none';
-          if (cols.includes('PM')) updates.oncall_pm = 'none';
-          setCell(y, m, d, p, { ...c, ...updates });
+          // Partial update — only touch the conflicting oncall fields, never overwrite am/pm
+          const patch = {};
+          if (cols.includes('AM')) patch.oncall_am = 'none';
+          if (cols.includes('PM')) patch.oncall_pm = 'none';
+          // Update in-memory data (only the fields being cleared)
+          const key = cellKey(y, m, d, p);
+          if (data[key]) { data[key] = { ...data[key], ...patch }; }
+          else { data[key] = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false, ...patch }; }
+          // Partial DB update — does not overwrite am/pm
+          const staffRow = staffByShortName[p];
+          if (staffRow) {
+            const iso = isoFromParts(y, m, d);
+            sb.from('assignments').update(patch)
+              .eq('person_id', staffRow.id).eq('date', iso)
+              .then(({ error }) => { if (error) console.error('oncall conflict clear failed:', error.message); });
+          }
         }
       }
 
@@ -3957,15 +3979,56 @@
         const byPerson = {};
         for (const { p, col } of hospConflicts) { (byPerson[p] = byPerson[p] || []).push(col); }
         for (const [p, cols] of Object.entries(byPerson)) {
-          const c = getCell(y, m, d, p);
-          const updates = {};
-          if (cols.includes('AM')) updates.am = '';
-          if (cols.includes('PM')) updates.pm = '';
-          setCell(y, m, d, p, { ...c, ...updates });
+          // Partial update — only touch the conflicting am/pm fields, never overwrite oncall
+          const patch = {};
+          if (cols.includes('AM')) patch.am = '';
+          if (cols.includes('PM')) patch.pm = '';
+          // Update in-memory data (only the fields being cleared)
+          const key = cellKey(y, m, d, p);
+          if (data[key]) { data[key] = { ...data[key], ...patch }; }
+          else { data[key] = { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false, ...patch }; }
+          // Partial DB update — does not overwrite oncall fields
+          const staffRow = staffByShortName[p];
+          if (staffRow) {
+            const iso = isoFromParts(y, m, d);
+            sb.from('assignments').update(patch)
+              .eq('person_id', staffRow.id).eq('date', iso)
+              .then(({ error }) => { if (error) console.error('hosp conflict clear failed:', error.message); });
+          }
         }
       }
 
-      setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
+      // If this cell wasn't in memory (DB row couldn't be loaded, e.g. stale person_id),
+      // and the user only changed oncall/exception (am/pm still empty), do a partial DB
+      // update to avoid overwriting real am/pm values that exist in the DB but not in memory.
+      if (!editCellInMemory && am === '' && pm === '') {
+        const key = cellKey(y, m, d, person);
+        data[key] = { am, pm, oncall_am, oncall_pm, exception };
+        const staffRow = staffByShortName[person];
+        if (staffRow) {
+          const iso = isoFromParts(y, m, d);
+          // Try UPDATE first (preserves am/pm in DB); if no row exists, fall back to full upsert
+          sb.from('assignments').update({ oncall_am, oncall_pm, exception })
+            .eq('person_id', staffRow.id).eq('date', iso).select('date')
+            .then(({ data: updated, error }) => {
+              if (error || !updated?.length) {
+                if (error) console.warn('Partial update failed, falling back to upsert:', error.message);
+                // No matching row found — safe to do full upsert (new row, am/pm will be empty as user sees)
+                sb.from('assignments').upsert({
+                  date: iso, person_id: staffRow.id,
+                  am, pm, oncall_am, oncall_pm, exception,
+                }, { onConflict: 'date,person_id' }).then(({ error: e2 }) => {
+                  if (e2) { delete data[key]; render(); showToast('Save failed — please try again.'); }
+                  else { persistDailyCoverage(y, m, d); }
+                });
+              } else {
+                persistDailyCoverage(y, m, d);
+              }
+            });
+        }
+      } else {
+        setCell(y, m, d, person, { am, pm, oncall_am, oncall_pm, exception });
+      }
       updateDaySummary();
       syncUndoBtn();
       return true;
