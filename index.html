@@ -2485,11 +2485,17 @@
     }
 
     async function fetchAssignments() {
-      const { data: rows, error } = await sb.from('assignments').select('*').limit(5000);
-      if (error) { console.error('fetchAssignments error:', error); return; }
-      if ((rows?.length ?? 0) >= 1000) console.warn(`[fetchAssignments] Received ${rows.length} rows — possible truncation at 1000-row default limit (now using limit 5000)`);
+      // Paginate to avoid Supabase's server-side max_rows cap (default 1000).
+      let allRows = [];
+      const PAGE = 1000;
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: rows, error } = await sb.from('assignments').select('*').range(offset, offset + PAGE - 1);
+        if (error) { console.error('fetchAssignments error:', error); return; }
+        allRows = allRows.concat(rows ?? []);
+        if ((rows?.length ?? 0) < PAGE) break;
+      }
       data = {};
-      for (const row of rows) {
+      for (const row of allRows) {
         const staffRow = staffById[row.person_id];
         if (!staffRow) {
           console.warn(`fetchAssignments: skipping row — person_id ${row.person_id} not in active staff (date: ${row.date})`);
@@ -2504,12 +2510,8 @@
           exception: row.exception,
         };
         const key = cellKey(y, m, d, staffRow.short_name);
-        if (data[key]) console.warn(`fetchAssignments: duplicate key ${key} — overwriting`, data[key], 'with', cell);
         data[key] = cell;
       }
-      // DEBUG: log any June 2026 entries (remove once blank-cell bug is diagnosed)
-      const debugEntries = Object.entries(data).filter(([k]) => k.startsWith('2026-6-'));
-      if (debugEntries.length) console.log('[fetchAssignments] June 2026 entries:', Object.fromEntries(debugEntries));
     }
 
     async function fetchDailyCoverage() {
