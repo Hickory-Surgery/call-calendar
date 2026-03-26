@@ -3282,8 +3282,15 @@
       while (el && el !== app) { secTop += el.offsetTop; el = el.offsetParent; }
       // 2. Today cell's offset within the month section (relative BCR delta — scroll-independent).
       const relativeTop = todayCell.getBoundingClientRect().top - monthSec.getBoundingClientRect().top;
-      // Position: month section top at sticky bottom, then shift down to today's row.
-      app.scrollTop = secTop - stickyOffset() + relativeTop;
+      // 3. Actual visible sticky height: in portrait the day-headers sticks at --topbar-h (56px)
+      //    which is inside the taller wrapped topbar, so the day-headers is hidden behind it.
+      //    max() of the two BCR bottoms gives the true visible sticky edge in any orientation.
+      const appTop  = app.getBoundingClientRect().top;
+      const stickyH = Math.max(
+        document.querySelector('.topbar').getBoundingClientRect().bottom,
+        document.querySelector('.day-headers').getBoundingClientRect().bottom
+      ) - appTop;
+      app.scrollTop = secTop - stickyH + relativeTop;
     }
 
     function initScroll(y, m) {
