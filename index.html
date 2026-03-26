@@ -2668,7 +2668,7 @@
         btn.textContent = SORT_LABELS[btn.dataset.sort] + (isActive ? (auditSortDir === 'desc' ? ' ⌄' : ' ^') : '');
       });
 
-      const dir = auditSortDir === 'desc' ? -1 : 1;
+      const dir = auditSortDir === 'desc' ? 1 : -1;
       const sorted = [...auditRows].sort((a, b) => {
         if (auditSortBy === 'calendar_date') {
           const ad = (a.new_row ?? a.old_row)?.date ?? '';
