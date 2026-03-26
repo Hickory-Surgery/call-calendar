@@ -2638,7 +2638,7 @@
     function auditDateLabel(iso) {
       if (!iso) return '—';
       const [y, m, d] = iso.split('-').map(Number);
-      return `${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]} ${d}, ${y}`;
+      return `${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}/${String(y).slice(2)}`;
     }
 
     function renderAuditDetail(row) {
@@ -2703,7 +2703,8 @@
         const person = affRow?.person_id ? (staffById[affRow.person_id]?.short_name ?? '?') : '—';
         const opClass = row.operation === 'INSERT' ? 'op-insert' : row.operation === 'DELETE' ? 'op-delete' : 'op-update';
         const opLabel = row.operation === 'INSERT' ? 'Add' : row.operation === 'DELETE' ? 'Del' : 'Edit';
-        const timeStr = new Date(row.changed_at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        const _ts = new Date(row.changed_at);
+        const timeStr = `${String(_ts.getMonth()+1).padStart(2,'0')}/${String(_ts.getDate()).padStart(2,'0')}/${String(_ts.getFullYear()).slice(2)} ${_ts.toLocaleString([],{hour:'numeric',minute:'2-digit'})}`;
         const byEmail = row.changed_by
           ? (profileRows.find(p => p.id === row.changed_by)?.email ?? '…')
           : 'System';
