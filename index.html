@@ -5198,8 +5198,15 @@
       requestAnimationFrame(scrollToCurrentWeek);
     });
 
+    function syncTopbarHeight() {
+      const h = document.querySelector('.topbar').offsetHeight;
+      document.documentElement.style.setProperty('--topbar-h', h + 'px');
+    }
+    syncTopbarHeight();
+
     let prevInnerWidth = window.innerWidth;
     window.addEventListener('resize', () => {
+      syncTopbarHeight();
       const wasSmall = prevInnerWidth < 640;
       const isSmall  = window.innerWidth < 640;
       prevInnerWidth = window.innerWidth;
