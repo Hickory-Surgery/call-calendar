@@ -5184,6 +5184,15 @@
 
     document.getElementById('todayBtn').addEventListener('click', () => {
       scrollToMonth(today.getFullYear(), today.getMonth());
+      if (window.innerWidth < 640) requestAnimationFrame(scrollToCurrentWeek);
+    });
+
+    let prevInnerWidth = window.innerWidth;
+    window.addEventListener('resize', () => {
+      const wasSmall = prevInnerWidth < 640;
+      const isSmall  = window.innerWidth < 640;
+      prevInnerWidth = window.innerWidth;
+      if (wasSmall || isSmall) requestAnimationFrame(scrollToCurrentWeek);
     });
 
     // ─────────────────────────────────────────────
