@@ -239,7 +239,7 @@ Deno.serve(async (req) => {
     const ov = overrideMap[dateIso]
     if (!ov) return ''
     const parts = []
-    if (ov.dayCall)   parts.push('Day Call')
+    if (ov.dayCall)   parts.push('Backup Call')
     if (ov.bari)      parts.push('Bari Call')
     if (ov.bariClass) parts.push('Bari Class')
     return parts.length ? ' · ' + parts.join(' · ') : ''
