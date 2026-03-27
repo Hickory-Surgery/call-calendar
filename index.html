@@ -2995,9 +2995,16 @@
           return bariatric[callPerson] ? callPerson : bariatric[backupPerson] ? backupPerson : null;
         })();
 
-        // When algorithm can't compute a day_call (e.g. CLOSED day), preserve any manual override
-        const existingManualDayCall = existingCov?.dayCallManual ? (existingCov?.dayCall ?? null) : null;
-        const finalDayCall     = computedDayCall || existingManualDayCall;
+        // When algorithm can't compute a day_call, preserve existing value if:
+        //   (a) it was explicitly set via the coverage panel (dayCallManual=true), OR
+        //   (b) the day is CLOSED — on closed days exception is the only backup source,
+        //       so removing exception should not silently wipe a previously computed backup.
+        //       On a normal (non-CLOSED) day, removing HOSP should correctly clear the backup.
+        const c0 = staff.length > 0 ? getCell(sy, sm, sd, staff[0]) : null;
+        const isClosed = c0 ? (dayDow === 0 ? c0.pm === 'CLOSED' : c0.am === 'CLOSED') : false;
+        const existingFallbackDayCall = (existingCov?.dayCallManual || isClosed)
+          ? (existingCov?.dayCall ?? null) : null;
+        const finalDayCall       = computedDayCall || existingFallbackDayCall;
         const finalDayCallManual = computedDayCall ? false : (existingCov?.dayCallManual ?? false);
 
         // Use computed bari if available; fall back to existing value (preserve manual flag too)
