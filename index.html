@@ -236,6 +236,7 @@
     .cov-grid input[type=checkbox] { width:16px; height:16px; cursor:pointer; accent-color:#1565C0; }
     .cell-date-num[data-cov-y] { cursor: pointer; }
     .date-has-override { outline: 1.5px solid #1565C0; outline-offset: 2px; border-radius: 2px; }
+    .bari-class-assigned { background: #00BCD4; color: #fff; border-radius: 2px; }
 
     /* Date number — spans full cell width, colored when on-call */
     .cell-date {
@@ -331,7 +332,7 @@
       color: rgba(255, 255, 255, 0.3);
     }
 
-    #ds-backup, #ds-bari {
+    #ds-backup, #ds-bari, #ds-bari-class {
       padding-left: 4px;
     }
 
@@ -1904,6 +1905,10 @@
             <span class="ds-label">Bariatric:</span>
             <span class="ds-value empty" id="ds-bari">—</span>
           </div>
+          <div class="ds-row">
+            <span class="ds-label">Bari Class:</span>
+            <span class="ds-value empty" id="ds-bari-class">—</span>
+          </div>
         </div>
       </div>
       <div class="topbar-actions">
@@ -2865,6 +2870,19 @@
       return [hy, hm, hd];
     }
 
+    // Returns 'frye', 'cvmc', or null for a given date.
+    // Frye: 3rd Thursday of every month.
+    // CVMC: 3rd Monday of Jan, Mar, May, Jul, Sep, Nov (m 0-indexed: 0,2,4,6,8,10).
+    // "3rd occurrence" = day-of-month between 15 and 21 inclusive.
+    // m is 0-indexed.
+    function isBariClassDay(y, m, d) {
+      const dow = new Date(y, m, d).getDay();
+      if (d < 15 || d > 21) return null;
+      if (dow === 4) return 'frye';
+      if (dow === 1 && m % 2 === 0) return 'cvmc';
+      return null;
+    }
+
     // Returns true if (y, m, d) is the observed date of a federal holiday.
     // m is 0-indexed; actual weekends always return false.
     function isHoliday(y, m, d) {
@@ -3564,16 +3582,20 @@
         (sunOv?.dayCallManual && sunOv.dayCall === person) ||
         (sunOv?.bariManual    && sunOv.bari    === person)
       ) ? ' date-has-override' : '';
+      const bariClassCls = !nameHidden && (
+        (isBariClassDay(y, m, d)     && satOv?.bariClass === person) ||
+        (weekend && isBariClassDay(y, m, d + 1) && sunOv?.bariClass === person)
+      ) ? ' bari-class-assigned' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
         const excCls  = exception ? ' exception' : '';
         return `<div class="closed-row${callCls}${excCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-          <span class="pname-closed${ovCls}">${nm}</span><span class="closed-label">CLOSED</span>
+          <span class="pname-closed${ovCls}${bariClassCls}">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
       if (!am && !pm && oncall_am === 'none' && oncall_pm === 'none' && isHoliday(y, m, d)) {
         return `<div class="closed-row holiday-closed${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-          <span class="pname-closed${ovCls}">${nm}</span><span class="closed-label">CLOSED</span>
+          <span class="pname-closed${ovCls}${bariClassCls}">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
       const amTxt = abbr(am), pmTxt = abbr(pm);
@@ -3581,7 +3603,7 @@
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (pmIn && oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
       const draggable = canEdit() && (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
-        <span class="pname${ovCls}">${nm}</span>
+        <span class="pname${ovCls}${bariClassCls}">${nm}</span>
         <span class="slots">
           <span class="${amCls}"${weekend ? ' data-slot="am"' : ''}>${amTxt ? esc(amTxt) : weekend ? '&nbsp;' : '—'}</span>
           <span class="slot-sep"></span>
@@ -5315,8 +5337,9 @@
       }) || '';
 
       // Backup and bari: use shared helpers so overrides are respected
-      const backupPerson = backupPersonForDay(ty, tm, td, dow);
-      const bariPerson   = bariPersonForDay(ty, tm, td, dow);
+      const backupPerson    = backupPersonForDay(ty, tm, td, dow);
+      const bariPerson      = bariPersonForDay(ty, tm, td, dow);
+      const bariClassPerson = dailyCoverage[isoFromParts(ty, tm, td)]?.bariClass || '';
 
       function set(id, name) {
         const el = document.getElementById(id);
@@ -5326,6 +5349,7 @@
       set('ds-call', callPerson);
       set('ds-backup', backupPerson);
       set('ds-bari', bariPerson);
+      set('ds-bari-class', bariClassPerson);
     }
 
     setupObservers();
