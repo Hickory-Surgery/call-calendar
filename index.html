@@ -2980,8 +2980,9 @@
       }
 
       for (const { sy, sm, sd, dayDow, iso } of daysToProcess) {
-        // Only overwrite bari_id if algorithm produces a result; preserve manual override otherwise
-        const existingBari = dailyCoverage[iso]?.bari ?? null;
+        const existingCov  = dailyCoverage[iso];
+        const existingBari = existingCov?.bari ?? null;
+
         const computedDayCall = backupPersonForDay(sy, sm, sd, dayDow);
         const computedBari    = (() => {
           function isOnCallDay(c) {
@@ -2994,14 +2995,21 @@
           return bariatric[callPerson] ? callPerson : bariatric[backupPerson] ? backupPerson : null;
         })();
 
-        const dayCallRow = computedDayCall ? staffByShortName[computedDayCall] : null;
-        // Use computed bari if available; fall back to existing manual value
-        const bariName = computedBari ?? existingBari;
-        const bariRow  = bariName ? staffByShortName[bariName] : null;
+        // When algorithm can't compute a day_call (e.g. CLOSED day), preserve any manual override
+        const existingManualDayCall = existingCov?.dayCallManual ? (existingCov?.dayCall ?? null) : null;
+        const finalDayCall     = computedDayCall || existingManualDayCall;
+        const finalDayCallManual = computedDayCall ? false : (existingCov?.dayCallManual ?? false);
+
+        // Use computed bari if available; fall back to existing value (preserve manual flag too)
+        const bariName       = computedBari ?? existingBari;
+        const finalBariManual = computedBari ? false : (existingCov?.bariManual ?? false);
+
+        const dayCallRow = finalDayCall ? staffByShortName[finalDayCall] : null;
+        const bariRow    = bariName     ? staffByShortName[bariName]     : null;
 
         // Only upsert if we have something to write (avoid creating empty rows)
         if (!dayCallRow && !bariRow) {
-          // Nothing computed — delete the row if it existed (to avoid stale data)
+          // Nothing computed or preserved — delete the row if it existed (to avoid stale data)
           sb.from('daily_coverage').delete().eq('date', iso);
           delete dailyCoverage[iso];
         } else {
@@ -3011,15 +3019,15 @@
             bari_id:         bariRow?.id    ?? null,
             updated_by:      null,
             updated_at:      new Date().toISOString(),
-            day_call_manual: false,
-            bari_manual:     false,
+            day_call_manual: finalDayCallManual,
+            bari_manual:     finalBariManual,
           }).then(({ error }) => {
             if (!error) {
               dailyCoverage[iso] = {
-                dayCall:       computedDayCall || null,
-                bari:          bariName || null,
-                dayCallManual: false,
-                bariManual:    false,
+                dayCall:       finalDayCall || null,
+                bari:          bariName     || null,
+                dayCallManual: finalDayCallManual,
+                bariManual:    finalBariManual,
               };
             }
           });
@@ -3546,7 +3554,8 @@
       ) ? ' date-has-override' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
-        return `<div class="closed-row${callCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
+        const excCls  = exception ? ' exception' : '';
+        return `<div class="closed-row${callCls}${excCls}${bandCls}" data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
           <span class="pname-closed${ovCls}">${nm}</span><span class="closed-label">CLOSED</span>
         </div>`;
       }
