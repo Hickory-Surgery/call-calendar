@@ -332,7 +332,7 @@
       color: rgba(255, 255, 255, 0.3);
     }
 
-    #ds-backup, #ds-bari, #ds-bari-class {
+    #ds-backup, #ds-bari {
       padding-left: 4px;
     }
 
@@ -1904,10 +1904,6 @@
           <div class="ds-row">
             <span class="ds-label">Bariatric:</span>
             <span class="ds-value empty" id="ds-bari">—</span>
-          </div>
-          <div class="ds-row">
-            <span class="ds-label">Bari Class:</span>
-            <span class="ds-value empty" id="ds-bari-class">—</span>
           </div>
         </div>
       </div>
@@ -5339,8 +5335,6 @@
       // Backup and bari: use shared helpers so overrides are respected
       const backupPerson    = backupPersonForDay(ty, tm, td, dow);
       const bariPerson      = bariPersonForDay(ty, tm, td, dow);
-      const bariClassPerson = dailyCoverage[isoFromParts(ty, tm, td)]?.bariClass || '';
-
       function set(id, name) {
         const el = document.getElementById(id);
         el.textContent = name ? displayName(name) : '—';
@@ -5349,7 +5343,6 @@
       set('ds-call', callPerson);
       set('ds-backup', backupPerson);
       set('ds-bari', bariPerson);
-      set('ds-bari-class', bariClassPerson);
     }
 
     setupObservers();
