@@ -3264,6 +3264,9 @@
     }
 
     function scrollToMonth(y, m) {
+      viewYear = y; viewMonth = m;
+      localStorage.setItem('viewPos', JSON.stringify({ y, m, at: Date.now() }));
+      document.getElementById('monthLabel').textContent = `${MONTHS[m]} ${y}`;
       if (!document.getElementById(`month-${y}-${m}`)) {
         initScroll(y, m); return;
       }
