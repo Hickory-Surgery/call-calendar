@@ -5317,12 +5317,12 @@
     updateDaySummary();
 
     // ─────────────────────────────────────────────
-    //  Scroll snap: if < 6 person-rows of a month
+    //  Scroll snap: if < 2 person-rows of a month
     //  remain visible, snap to the adjacent month
     // ─────────────────────────────────────────────
     (function setupScrollSnap() {
       const ROW_PX = 22;      // approx height of one person row (min-height 20px + margin 2px)
-      const THRESHOLD_FWD = 6 * ROW_PX;   // snap forward: < 6 rows remain in current month
+      const THRESHOLD_FWD = 2 * ROW_PX;   // snap forward: < 2 rows remain in current month
       const THRESHOLD_BACK = 2 * ROW_PX;  // snap back:    < 2 rows scrolled past month top
       const DEBOUNCE = 160;     // ms to wait after scroll stops before evaluating snap
       let snapTimer = null;
