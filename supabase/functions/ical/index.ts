@@ -219,18 +219,19 @@ Deno.serve(async (req) => {
     return new Response('Error fetching assignments', { status: 500 })
   }
 
-  // Fetch daily_coverage entries where this person is day call or bari
+  // Fetch daily_coverage entries where this person is day call, bari, or bari class
   const { data: ovRows } = await sb
     .from('daily_coverage')
-    .select('date, day_call_id, bari_id')
-    .or(`day_call_id.eq.${staffRow.id},bari_id.eq.${staffRow.id}`)
+    .select('date, day_call_id, day_call_manual, bari_id, bari_class_id')
+    .or(`day_call_id.eq.${staffRow.id},bari_id.eq.${staffRow.id},bari_class_id.eq.${staffRow.id}`)
 
-  // Map of dateIso → { dayCall: bool, bari: bool }
-  const overrideMap: Record<string, { dayCall: boolean; bari: boolean }> = {}
+  // Map of dateIso → { dayCall: bool (manual only), bari: bool, bariClass: bool }
+  const overrideMap: Record<string, { dayCall: boolean; bari: boolean; bariClass: boolean }> = {}
   for (const ov of ovRows ?? []) {
     overrideMap[ov.date] = {
-      dayCall: ov.day_call_id === staffRow.id,
-      bari:    ov.bari_id     === staffRow.id,
+      dayCall:   ov.day_call_id    === staffRow.id && !!ov.day_call_manual,
+      bari:      ov.bari_id        === staffRow.id,
+      bariClass: ov.bari_class_id  === staffRow.id,
     }
   }
 
@@ -238,8 +239,9 @@ Deno.serve(async (req) => {
     const ov = overrideMap[dateIso]
     if (!ov) return ''
     const parts = []
-    if (ov.dayCall) parts.push('Day Call')
-    if (ov.bari)    parts.push('Bari Call')
+    if (ov.dayCall)   parts.push('Day Call')
+    if (ov.bari)      parts.push('Bari Call')
+    if (ov.bariClass) parts.push('Bari Class')
     return parts.length ? ' · ' + parts.join(' · ') : ''
   }
 
