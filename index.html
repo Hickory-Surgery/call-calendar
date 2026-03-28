@@ -5261,11 +5261,32 @@
 
     let prevInnerWidth = window.innerWidth;
     window.addEventListener('resize', () => {
-      syncTopbarHeight();
       const wasSmall = prevInnerWidth < 640;
       const isSmall  = window.innerWidth < 640;
       prevInnerWidth = window.innerWidth;
-      if (wasSmall || isSmall) requestAnimationFrame(scrollToCurrentWeek);
+
+      if (wasSmall || isSmall) {
+        // Capture which section is at the top BEFORE syncTopbarHeight shifts the layout
+        const app = getApp();
+        const topbar    = document.querySelector('.topbar');
+        const dayHdrs   = document.querySelector('.day-headers');
+        const stickyBot = Math.max(topbar.getBoundingClientRect().bottom, dayHdrs.getBoundingClientRect().bottom);
+        const sections  = [...document.querySelectorAll('.month-section')];
+        const anchor    = sections.find(s => s.getBoundingClientRect().bottom > stickyBot) || sections[0];
+
+        syncTopbarHeight();
+
+        requestAnimationFrame(() => {
+          if (!anchor) return;
+          const newStickyH = Math.max(topbar.getBoundingClientRect().bottom, dayHdrs.getBoundingClientRect().bottom)
+            - app.getBoundingClientRect().top;
+          let top = 0, el = anchor;
+          while (el && el !== app) { top += el.offsetTop; el = el.offsetParent; }
+          app.scrollTop = top - newStickyH;
+        });
+      } else {
+        syncTopbarHeight();
+      }
     });
 
     // ─────────────────────────────────────────────
