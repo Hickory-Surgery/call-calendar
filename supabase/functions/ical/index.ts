@@ -92,10 +92,12 @@ function buildICal(calName: string, person: string, events: string[]): string {
     'METHOD:PUBLISH',
     fold(`X-WR-CALNAME:${calName} – Call Schedule`),
     'X-WR-TIMEZONE:America/New_York',
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+    'X-PUBLISHED-TTL:PT1H',
     ...events,
     'END:VCALENDAR',
   ]
-  return lines.join('\r\n')
+  return lines.join('\r\n') + '\r\n'
 }
 
 Deno.serve(async (req) => {
@@ -191,7 +193,8 @@ Deno.serve(async (req) => {
     return new Response(buildICal(calName, 'oncall', events), {
       headers: {
         'Content-Type': 'text/calendar; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="oncall.ics"',
+        'Content-Disposition': 'inline; filename="oncall.ics"',
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
       },
     })
   }
@@ -288,7 +291,8 @@ Deno.serve(async (req) => {
   return new Response(ical, {
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${person}-call.ics"`,
+      'Content-Disposition': `inline; filename="${person}-call.ics"`,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
     },
   })
 })

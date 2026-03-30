@@ -4593,7 +4593,7 @@
       callFeedToken = data.call_feed_token ?? '';
       const practiceBtn = document.getElementById('practiceCallFeedBtn');
       if (practiceBtn) {
-        const url = callFeedToken ? `${ICAL_BASE}?mode=oncall&token=${callFeedToken}` : '';
+        const url = callFeedToken ? `${ICAL_BASE}/feed.ics?mode=oncall&token=${callFeedToken}` : '';
         practiceBtn.dataset.url = url;
         practiceBtn.classList.toggle('sub-btn-disabled', !url);
       }
@@ -4727,7 +4727,7 @@
       list.innerHTML = staff.map((name, i) => {
         const row = staffByShortName[name];
         const token = row?.feed_token;
-        const feedUrl = token ? `${ICAL_BASE}?person=${encodeURIComponent(name)}&token=${token}` : '';
+        const feedUrl = token ? `${ICAL_BASE}/feed.ics?person=${encodeURIComponent(name)}&token=${token}` : '';
         const subBtn = `<button class="sub-btn${!feedUrl ? ' sub-btn-disabled' : ''}" data-url="${esc(feedUrl)}" title="Copy subscribe link" aria-label="Copy subscribe link">&#128197;</button>`;
         if (!admin) {
           return `<div class="staff-item staff-item-readonly">
@@ -4819,7 +4819,7 @@
       list.querySelectorAll('.sub-btn:not(.sub-btn-disabled)').forEach(btn => {
         btn.addEventListener('click', e => {
           e.stopPropagation();
-          navigator.clipboard.writeText(btn.dataset.url).then(() => {
+          navigator.clipboard.writeText((btn.dataset.url || '').replace(/^https:\/\//, 'webcal://')).then(() => {
             const prev = btn.innerHTML;
             btn.innerHTML = '✓';
             btn.classList.add('sub-btn-copied');
@@ -4833,7 +4833,7 @@
     document.getElementById('practiceCallFeedBtn').addEventListener('click', e => {
       const btn = e.currentTarget;
       if (btn.classList.contains('sub-btn-disabled')) return;
-      navigator.clipboard.writeText(btn.dataset.url).then(() => {
+      navigator.clipboard.writeText((btn.dataset.url || '').replace(/^https:\/\//, 'webcal://')).then(() => {
         const prev = btn.innerHTML;
         btn.innerHTML = '✓';
         btn.classList.add('sub-btn-copied');
