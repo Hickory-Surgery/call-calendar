@@ -3573,14 +3573,16 @@
       const satOv = dailyCoverage[isoFromParts(y, m, d)];
       const sunOv = weekend ? dailyCoverage[isoFromParts(y, m, d + 1)] : null;
       const ovCls = !nameHidden && (
-        (satOv?.dayCallManual && satOv.dayCall === person) ||
-        (satOv?.bariManual    && satOv.bari    === person) ||
-        (sunOv?.dayCallManual && sunOv.dayCall === person) ||
-        (sunOv?.bariManual    && sunOv.bari    === person)
+        (satOv?.dayCallManual  && satOv.dayCall  === person) ||
+        (satOv?.bariManual     && satOv.bari     === person) ||
+        (satOv?.bariClassManual && satOv.bariClass === person) ||
+        (sunOv?.dayCallManual  && sunOv.dayCall  === person) ||
+        (sunOv?.bariManual     && sunOv.bari     === person) ||
+        (sunOv?.bariClassManual && sunOv.bariClass === person)
       ) ? ' date-has-override' : '';
       const bariClassCls = !nameHidden && (
-        (isBariClassDay(y, m, d)     && satOv?.bariClass === person) ||
-        (weekend && isBariClassDay(y, m, d + 1) && sunOv?.bariClass === person)
+        satOv?.bariClass === person ||
+        (weekend && sunOv?.bariClass === person)
       ) ? ' bari-class-assigned' : '';
       if (am === 'CLOSED') {
         const callCls = oncall_am !== 'none' ? ` oncall-${oncall_am}` : oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '';
