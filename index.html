@@ -3573,12 +3573,10 @@
       const satOv = dailyCoverage[isoFromParts(y, m, d)];
       const sunOv = weekend ? dailyCoverage[isoFromParts(y, m, d + 1)] : null;
       const ovCls = !nameHidden && (
-        (satOv?.dayCallManual  && satOv.dayCall  === person) ||
-        (satOv?.bariManual     && satOv.bari     === person) ||
-        (satOv?.bariClassManual && satOv.bariClass === person) ||
-        (sunOv?.dayCallManual  && sunOv.dayCall  === person) ||
-        (sunOv?.bariManual     && sunOv.bari     === person) ||
-        (sunOv?.bariClassManual && sunOv.bariClass === person)
+        (satOv?.dayCallManual && satOv.dayCall === person) ||
+        (satOv?.bariManual    && satOv.bari    === person) ||
+        (sunOv?.dayCallManual && sunOv.dayCall === person) ||
+        (sunOv?.bariManual    && sunOv.bari    === person)
       ) ? ' date-has-override' : '';
       const bariClassCls = !nameHidden && (
         satOv?.bariClass === person ||
