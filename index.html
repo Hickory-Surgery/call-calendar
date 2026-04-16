@@ -12,6 +12,8 @@
     href="data:application/json,{&quot;name&quot;:&quot;Call Calendar&quot;,&quot;short_name&quot;:&quot;Calls&quot;,&quot;display&quot;:&quot;standalone&quot;,&quot;background_color&quot;:&quot;%2337474F&quot;,&quot;theme_color&quot;:&quot;%2337474F&quot;}">
   <title>Call Calendar</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='2' y='5' width='28' height='25' rx='3' fill='%231565C0'/><rect x='2' y='5' width='28' height='9' rx='3' fill='%231565C0'/><rect x='2' y='10' width='28' height='4' fill='%231565C0'/><rect x='5' y='5' width='22' height='25' rx='0' fill='none'/><rect x='2' y='11' width='28' height='19' rx='3' fill='white'/><rect x='2' y='11' width='28' height='6' fill='white'/><line x1='2' y1='16' x2='30' y2='16' stroke='%23E3F2FD' stroke-width='1'/><circle cx='9' cy='21' r='2' fill='%231565C0'/><circle cx='16' cy='21' r='2' fill='%231565C0'/><circle cx='23' cy='21' r='2' fill='%231565C0'/><circle cx='9' cy='27' r='2' fill='%231565C0'/><circle cx='16' cy='27' r='2' fill='%231565C0'/><rect x='9' y='2' width='3' height='7' rx='1.5' fill='%2390CAF9'/><rect x='20' y='2' width='3' height='7' rx='1.5' fill='%2390CAF9'/></svg>">
+  <link rel="preconnect" href="https://pkjlnjsswoadftkseffo.supabase.co">
+  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
     const SUPABASE_URL = 'https://pkjlnjsswoadftkseffo.supabase.co';
@@ -2431,6 +2433,8 @@
 
     let staff = [];
     let data = {};
+    let assignmentsStart = null; // ISO string — earliest date loaded into `data`
+    let assignmentsEnd   = null; // ISO string — latest date loaded into `data`
     let bariatric = {};
     let dailyCoverage = {}; // { "YYYY-MM-DD": { dayCall: shortName|null, bari: shortName|null } }
     let fullnames = {};
@@ -2493,33 +2497,51 @@
     }
 
     async function fetchAssignments() {
-      // Paginate to avoid Supabase's server-side max_rows cap (default 1000).
-      let allRows = [];
+      // Load a rolling window: 6 months back through 14 months forward from today.
+      const s = new Date(today.getFullYear(), today.getMonth() - 6, 1);
+      const e = new Date(today.getFullYear(), today.getMonth() + 15, 0);
+      assignmentsStart = isoFromParts(s.getFullYear(), s.getMonth(), s.getDate());
+      assignmentsEnd   = isoFromParts(e.getFullYear(), e.getMonth(), e.getDate());
+      data = {};
+      await loadAssignmentRange(assignmentsStart, assignmentsEnd);
+    }
+
+    // Fetch assignments within [startISO, endISO] and merge into `data` (does not clear existing entries).
+    async function loadAssignmentRange(startISO, endISO) {
       const PAGE = 1000;
       for (let offset = 0; ; offset += PAGE) {
-        const { data: rows, error } = await sb.from('assignments').select('*').range(offset, offset + PAGE - 1);
+        const { data: rows, error } = await sb.from('assignments')
+          .select('*')
+          .gte('date', startISO)
+          .lte('date', endISO)
+          .range(offset, offset + PAGE - 1);
         if (error) { console.error('fetchAssignments error:', error); return; }
-        allRows = allRows.concat(rows ?? []);
+        for (const row of rows ?? []) {
+          const staffRow = staffById[row.person_id];
+          if (!staffRow) {
+            console.warn(`fetchAssignments: skipping row — person_id ${row.person_id} not in active staff (date: ${row.date})`);
+            continue;
+          }
+          const { y, m, d } = isoToDateParts(row.date);
+          data[cellKey(y, m, d, staffRow.short_name)] = {
+            am: row.am, pm: row.pm,
+            oncall_am: row.oncall_am, oncall_pm: row.oncall_pm,
+            exception: row.exception,
+          };
+        }
         if ((rows?.length ?? 0) < PAGE) break;
       }
-      data = {};
-      for (const row of allRows) {
-        const staffRow = staffById[row.person_id];
-        if (!staffRow) {
-          console.warn(`fetchAssignments: skipping row — person_id ${row.person_id} not in active staff (date: ${row.date})`);
-          continue;
-        }
-        const { y, m, d } = isoToDateParts(row.date);
-        const cell = {
-          am: row.am,
-          pm: row.pm,
-          oncall_am: row.oncall_am,
-          oncall_pm: row.oncall_pm,
-          exception: row.exception,
-        };
-        const key = cellKey(y, m, d, staffRow.short_name);
-        data[key] = cell;
-      }
+    }
+
+    // Fetch assignments for month (y, m) if it falls outside the currently loaded range.
+    async function ensureMonthLoaded(y, m) {
+      if (!assignmentsStart) return;
+      const monthStart = isoFromParts(y, m, 1);
+      const monthEnd   = isoFromParts(y, m, new Date(y, m + 1, 0).getDate());
+      if (monthStart >= assignmentsStart && monthEnd <= assignmentsEnd) return;
+      await loadAssignmentRange(monthStart, monthEnd);
+      if (monthStart < assignmentsStart) assignmentsStart = monthStart;
+      if (monthEnd   > assignmentsEnd)   assignmentsEnd   = monthEnd;
     }
 
     async function fetchDailyCoverage() {
@@ -3157,21 +3179,37 @@
     function getContainer() { return document.querySelector('.cal-container'); }
     function getApp() { return document.querySelector('.app'); }
 
-    function appendNextMonth() {
-      const sections = getContainer().querySelectorAll('.month-section');
-      const last = sections[sections.length - 1];
-      const { y, m } = nextMo(+last.dataset.y, +last.dataset.m);
-      getContainer().insertBefore(createMonthSection(y, m), bottomSentinel);
+    let _appendingNext = false;
+    async function appendNextMonth() {
+      if (_appendingNext) return;
+      _appendingNext = true;
+      try {
+        const sections = getContainer().querySelectorAll('.month-section');
+        const last = sections[sections.length - 1];
+        const { y, m } = nextMo(+last.dataset.y, +last.dataset.m);
+        await ensureMonthLoaded(y, m);
+        getContainer().insertBefore(createMonthSection(y, m), bottomSentinel);
+      } finally {
+        _appendingNext = false;
+      }
     }
 
-    function prependPrevMonth() {
-      const first = getContainer().querySelector('.month-section');
-      const { y, m } = prevMo(+first.dataset.y, +first.dataset.m);
-      const app = getApp();
-      const prevST = app.scrollTop;
-      const prevH = getContainer().scrollHeight;
-      getContainer().insertBefore(createMonthSection(y, m), first);
-      app.scrollTop = prevST + (getContainer().scrollHeight - prevH);
+    let _prependingPrev = false;
+    async function prependPrevMonth() {
+      if (_prependingPrev) return;
+      _prependingPrev = true;
+      try {
+        const first = getContainer().querySelector('.month-section');
+        const { y, m } = prevMo(+first.dataset.y, +first.dataset.m);
+        await ensureMonthLoaded(y, m);
+        const app = getApp();
+        const prevST = app.scrollTop;
+        const prevH = getContainer().scrollHeight;
+        getContainer().insertBefore(createMonthSection(y, m), first);
+        app.scrollTop = prevST + (getContainer().scrollHeight - prevH);
+      } finally {
+        _prependingPrev = false;
+      }
     }
 
     // ─────────────────────────────────────────────
