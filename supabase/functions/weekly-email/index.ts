@@ -93,7 +93,7 @@ Deno.serve(async (req) => {
   // ── Fetch staff ───────────────────────────────────────────────────────────
   const { data: staffRows, error: staffErr } = await sb
     .from('staff')
-    .select('id, short_name, display_name')
+    .select('id, short_name, display_name, is_bariatric')
     .eq('active', true)
     .order('sort_order')
 
@@ -104,6 +104,7 @@ Deno.serve(async (req) => {
 
   const staffOrder: string[] = staffRows.map(r => r.short_name)
   const staffById: Record<string, typeof staffRows[number]> = Object.fromEntries(staffRows.map(r => [r.id, r]))
+  const bariatric = new Set(staffRows.filter(r => r.is_bariatric).map(r => r.short_name))
 
   function displayName(shortName: string): string {
     const row = staffRows.find(r => r.short_name === shortName)
@@ -145,13 +146,48 @@ Deno.serve(async (req) => {
     .gte('date', iso(monday))
     .lte('date', iso(addDays(monday, 6)))
 
-  type Coverage = { dayCall: string; bari: string }
+  type Coverage = { dayCall: string; bari: string | null }
   const coverage: Record<string, Coverage> = {}
   for (const row of covRows ?? []) {
     coverage[row.date] = {
       dayCall: row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : '',
-      bari:    row.bari_id     ? (staffById[row.bari_id]?.short_name     ?? '') : '',
+      // null = no override stored; algorithm fallback will apply. '' = explicitly cleared.
+      bari: row.bari_id !== null ? (staffById[row.bari_id]?.short_name ?? '') : null,
     }
+  }
+
+  // ── Bari computation helpers (mirrors app's bariPersonForDay logic) ──────
+  // Returns the assignments-based backup person (exception flag → hosp slot → Friday fallback).
+  function computeBackup(dataIso: string, dow: number): string {
+    const excPerson = staffOrder.find(p => data[dataIso]?.[p]?.exception) ?? ''
+    if (excPerson) return excPerson
+    const hospPerson = staffOrder.find(p => {
+      const c = data[dataIso]?.[p]
+      if (!c) return false
+      if (dow === 6) return c.am === 'hosp'
+      if (dow === 0) return c.pm === 'hosp'
+      return c.am === 'hosp' || c.pm === 'hosp'
+    }) ?? ''
+    if (hospPerson) return hospPerson
+    // Weekend: fall back to Friday's hosp person (Saturday data for both Sat/Sun)
+    if (dow === 0 || dow === 6) {
+      const friDataIso = iso(addDays(saturday, -1))
+      return staffOrder.find(p => {
+        const c = data[friDataIso]?.[p]
+        return c?.am === 'hosp' || c?.pm === 'hosp'
+      }) ?? ''
+    }
+    return ''
+  }
+
+  // Returns the bari person: manual override if set, else on-call or backup if bariatric.
+  function computeBari(covIso: string, dataIso: string, dow: number, callPerson: string): string {
+    const manualBari = coverage[covIso]?.bari
+    if (manualBari !== null && manualBari !== undefined) return manualBari
+    if (bariatric.has(callPerson)) return callPerson
+    const backup = computeBackup(dataIso, dow)
+    if (bariatric.has(backup)) return backup
+    return ''
   }
 
   // ── Compute per-day summaries ─────────────────────────────────────────────
@@ -199,7 +235,7 @@ Deno.serve(async (req) => {
       onCall: callPerson,
       weekdayCall,
       backup,
-      bari: cov.bari,
+      bari: computeBari(covIso, dataIso, dow, callPerson),
       closed: dayClosed,
     })
   }
@@ -250,8 +286,8 @@ Deno.serve(async (req) => {
     <thead>
       <tr style="background:#F5F7FA">
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Day</th>
-        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">On Call</th>
-        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Weekday Call</th>
+        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">On Call<br><span style="font-weight:400;font-size:0.78rem;color:#90A4AE">Nights &amp; weekends</span></th>
+        <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Weekday Call<br><span style="font-weight:400;font-size:0.78rem;color:#90A4AE">7am to 5pm</span></th>
         <th style="padding:8px 12px;text-align:left;font-weight:600;border-bottom:2px solid #ECEFF1">Bariatric</th>
       </tr>
     </thead>
