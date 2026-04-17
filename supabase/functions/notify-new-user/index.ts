@@ -37,19 +37,41 @@ Deno.serve(async (req) => {
   }
   console.log('New user:', user.email)
 
-  // Idempotency: only notify once per user
+  // Idempotency: skip if this user is already in pending_users (regardless of
+  // whether notified_at was set — avoids re-notification if the email succeeded
+  // but the notified_at update failed on a prior attempt).
   const { data: existing } = await sb
     .from('pending_users')
-    .select('notified_at')
+    .select('id')
     .eq('id', user.id)
     .maybeSingle()
 
-  if (existing?.notified_at) {
-    console.log('Already notified')
-    return new Response('Already notified', { status: 200, headers: CORS })
+  if (existing) {
+    console.log('Already in pending_users — skipping')
+    return new Response('Already pending', { status: 200, headers: CORS })
   }
 
-  await sb.from('pending_users').upsert({ id: user.id, email: user.email })
+  // Guard: if any existing auth user with this email already has a profile,
+  // this person is set up under a different UUID — don't add them as pending.
+  const { data: authUsers } = await sb.auth.admin.listUsers()
+  const sameEmailIds = (authUsers?.users ?? [])
+    .filter(u => u.email?.toLowerCase() === user.email.toLowerCase() && u.id !== user.id)
+    .map(u => u.id)
+
+  if (sameEmailIds.length) {
+    const { data: existingProfile } = await sb
+      .from('profiles')
+      .select('id')
+      .in('id', sameEmailIds)
+      .maybeSingle()
+
+    if (existingProfile) {
+      console.log('Email already has a profile under a different UUID — skipping pending_users')
+      return new Response('Profile exists for email', { status: 200, headers: CORS })
+    }
+  }
+
+  await sb.from('pending_users').insert({ id: user.id, email: user.email })
 
   // Collect admin emails
   const { data: adminProfiles } = await sb

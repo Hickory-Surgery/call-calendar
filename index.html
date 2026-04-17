@@ -2309,7 +2309,12 @@
     });
 
     async function fetchRole(userId) {
-      const { data } = await sb.from('profiles').select('role').eq('id', userId).single();
+      const { data, error } = await sb.from('profiles').select('role').eq('id', userId).single();
+      if (error && error.code !== 'PGRST116') {
+        // Real error (network, RLS, etc.) — not a missing-row. Re-throw so
+        // applySession doesn't mistake this for a genuinely new user.
+        throw error;
+      }
       return data ? data.role : null;
     }
 
@@ -2340,7 +2345,16 @@
     async function applySession(session) {
       if (sessionApplied) return;
       sessionApplied = true;
-      const role = await fetchRole(session.user.id);
+      let role;
+      try {
+        role = await fetchRole(session.user.id);
+      } catch {
+        // fetchRole threw a non-404 error (network blip, RLS issue, etc.).
+        // Don't treat this as a new user — just drop back to the login screen.
+        sessionApplied = false;
+        showToast('Could not verify access — please try again.');
+        return;
+      }
       if (!role) {
         // Notify admins of the new user (fires once; edge function is idempotent)
         try {
