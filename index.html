@@ -3250,11 +3250,22 @@
         if (!row) return;
         const y = +row.dataset.y, m = +row.dataset.m, d = +row.dataset.d, person = row.dataset.person;
         const cell = getCell(y, m, d, person);
-        if (cell.oncall_am === 'none' && cell.oncall_pm === 'none') { e.preventDefault(); return; }
 
+        // Determine if this is an exception drag (initiated from the AM side of an exception cell).
+        // Exception is stored on the AM half, so we only treat it as an exception drag when
+        // the mousedown originated inside .am-val.
+        const fromAm = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.am-val'));
         const isWeekend = new Date(y, m, d).getDay() === 6;
+        const isExceptionDrag = fromAm && cell.exception;
+
+        if (!isExceptionDrag && cell.oncall_am === 'none' && cell.oncall_pm === 'none') {
+          e.preventDefault(); return;
+        }
+
         let half;
-        if (isWeekend) {
+        if (isExceptionDrag) {
+          half = 'am'; // exception lives on AM side only
+        } else if (isWeekend) {
           const pmDrag = !!(dragInitiatedFrom && dragInitiatedFrom.closest('.pm-val'));
           if (pmDrag) {
             // Sun (PM) side: always drags independently
@@ -3270,7 +3281,7 @@
           half = 'both';
         }
 
-        dragSrc = { y, m, d, person, half };
+        dragSrc = { y, m, d, person, half, type: isExceptionDrag ? 'exception' : 'oncall' };
         e.dataTransfer.effectAllowed = 'move';
         row.classList.add('drag-source');
       });
@@ -3301,7 +3312,11 @@
         e.preventDefault();
         const src = getCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person);
         const tgt = getCell(ty, tm, td, tPerson);
-        if (dragSrc.half === 'am') {
+        if (dragSrc.type === 'exception') {
+          // Move exception flag: source loses it, target gains it; oncall untouched on both sides
+          setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, exception: false });
+          setCell(ty, tm, td, tPerson, { ...tgt, exception: true });
+        } else if (dragSrc.half === 'am') {
           setCell(dragSrc.y, dragSrc.m, dragSrc.d, dragSrc.person, { ...src, oncall_am: 'none' });
           setCell(ty, tm, td, tPerson, { ...tgt, oncall_am: src.oncall_am });
         } else if (dragSrc.half === 'pm') {
@@ -3655,7 +3670,7 @@
       const amTxt = abbr(am), pmTxt = abbr(pm);
       const amCls = 'am-val' + (amTxt ? '' : ' empty') + (amIn && oncall_am !== 'none' ? ` oncall-${oncall_am}` : '') + (am === 'hosp' ? ' hosp' : '') + (amIn && exception ? ' exception' : '') + (amIn ? '' : ' slot-out');
       const pmCls = 'pm-val' + (pmTxt ? '' : ' empty') + (pmIn && oncall_pm !== 'none' ? ` oncall-${oncall_pm}` : '') + (pm === 'hosp' ? ' hosp' : '') + (pmIn ? '' : ' slot-out');
-      const draggable = canEdit() && (oncall_am !== 'none' || oncall_pm !== 'none') ? ' draggable="true"' : '';
+      const draggable = canEdit() && (oncall_am !== 'none' || oncall_pm !== 'none' || (amIn && exception)) ? ' draggable="true"' : '';
       return `<div class="person-row${bandCls}"${draggable} data-y="${y}" data-m="${m}" data-d="${d}" data-person="${esc(person)}">
         <span class="pname${ovCls}${bariClassCls}">${nm}</span>
         <span class="slots">
