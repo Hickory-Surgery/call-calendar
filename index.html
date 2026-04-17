@@ -2035,10 +2035,15 @@
 
         <div class="tab-panel" id="tab-data">
           <button class="data-btn" id="totalsBtn"><span style="filter:grayscale(1)">🧮</span> Totals</button>
-          <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
-          <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
-          <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
-          <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+          <div class="email-recipients-section" id="cautionSection">
+            <div class="rates-section-title" id="cautionToggle" style="cursor:pointer;user-select:none">Caution ›</div>
+            <div id="cautionBody" style="display:none">
+              <button class="data-btn" id="exportBtn">&#8595; Export data as JSON</button>
+              <button class="data-btn admin-only" id="importBtn">&#8593; Import data from JSON</button>
+              <button class="data-btn danger admin-only" id="clearMonthBtn">&#x2715; Clear this month's data</button>
+              <button class="data-btn danger admin-only" id="clearAllBtn">&#x2715; Clear all data</button>
+            </div>
+          </div>
 
           <div class="email-recipients-section editor-only" id="emailRecipientsSection">
             <div class="rates-section-title" id="recipientsToggle" style="cursor:pointer;user-select:none">Weekly Email Settings ›</div>
@@ -4607,6 +4612,13 @@
       viewAsRole = null;
       syncRolePreviewBanner();
       render();
+    });
+
+    document.getElementById('cautionToggle').addEventListener('click', () => {
+      const body = document.getElementById('cautionBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('cautionToggle').textContent = open ? 'Caution ›' : 'Caution ↓';
     });
 
     document.getElementById('recipientsToggle').addEventListener('click', () => {
