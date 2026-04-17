@@ -146,13 +146,13 @@ Deno.serve(async (req) => {
     .gte('date', iso(monday))
     .lte('date', iso(addDays(monday, 6)))
 
-  type Coverage = { dayCall: string; bari: string | null }
+  type Coverage = { dayCall: string | null; bari: string | null }
   const coverage: Record<string, Coverage> = {}
   for (const row of covRows ?? []) {
     coverage[row.date] = {
-      dayCall: row.day_call_id ? (staffById[row.day_call_id]?.short_name ?? '') : '',
       // null = no override stored; algorithm fallback will apply. '' = explicitly cleared.
-      bari: row.bari_id !== null ? (staffById[row.bari_id]?.short_name ?? '') : null,
+      dayCall: row.day_call_id !== null ? (staffById[row.day_call_id]?.short_name ?? '') : null,
+      bari:    row.bari_id    !== null ? (staffById[row.bari_id]?.short_name    ?? '') : null,
     }
   }
 
@@ -178,6 +178,13 @@ Deno.serve(async (req) => {
       }) ?? ''
     }
     return ''
+  }
+
+  // Returns the day-call person: manual override if set, else hosp/exception backup.
+  function computeDayCall(covIso: string, dataIso: string, dow: number): string {
+    const manual = coverage[covIso]?.dayCall
+    if (manual !== null && manual !== undefined) return manual
+    return computeBackup(dataIso, dow)
   }
 
   // Returns the bari person: manual override if set, else on-call or backup if bariatric.
@@ -226,9 +233,8 @@ Deno.serve(async (req) => {
 
     // Weekday call: HOSP/exception person — blank on weekends
     // Backup: same as weekday call on weekdays; Friday's day_call on weekends
-    const cov = coverage[covIso] ?? { dayCall: '', bari: '' }
-    const weekdayCall = isWeekend ? '' : (cov.dayCall ?? '')
-    const backup      = isWeekend ? fridayBackup : (cov.dayCall ?? '')
+    const weekdayCall = isWeekend ? '' : computeDayCall(covIso, dataIso, dow)
+    const backup      = isWeekend ? fridayBackup : computeDayCall(covIso, dataIso, dow)
 
     summaries.push({
       date: day,
