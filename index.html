@@ -5433,8 +5433,10 @@
         return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
       }) || '';
 
-      // Backup and bari: use shared helpers so overrides are respected
-      const backupPerson    = backupPersonForDay(ty, tm, td, dow);
+      // Backup and bari: use shared helpers so overrides are respected.
+      // Day Call has no meaning on weekends — show "—" on Sat/Sun.
+      const isWeekend = dow === 0 || dow === 6;
+      const backupPerson    = isWeekend ? null : backupPersonForDay(ty, tm, td, dow);
       const bariPerson      = bariPersonForDay(ty, tm, td, dow);
       function set(id, name) {
         const el = document.getElementById(id);
