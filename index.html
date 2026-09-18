@@ -1821,6 +1821,9 @@
       z-index: 1000;
       pointer-events: none;
     }
+    .toast-success {
+      background: #2e7d32;
+    }
   </style>
 </head>
 
@@ -2317,7 +2320,7 @@
       const { error } = await sb.auth.updateUser({ password: pass });
       if (error) { msg.textContent = error.message; return; }
       passwordRecoveryMode = false;
-      showToast('Password updated — signing you in.');
+      showToast('Password updated — signing you in.', 'success');
       const { data: { session } } = await sb.auth.getSession();
       if (session) applySession(session);
     });
@@ -2532,9 +2535,9 @@
       return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     }
 
-    function showToast(msg) {
+    function showToast(msg, type = 'error') {
       const t = document.createElement('div');
-      t.className = 'toast';
+      t.className = 'toast' + (type === 'success' ? ' toast-success' : '');
       t.textContent = msg;
       document.body.appendChild(t);
       setTimeout(() => t.remove(), 3000);
@@ -2695,7 +2698,7 @@
           pendingRows = pendingRows.filter(p => p.id !== btn.dataset.id);
           await fetchProfiles();
           renderUsersList();
-          showToast(`${btn.dataset.email} approved as ${role}.`);
+          showToast(`${btn.dataset.email} approved as ${role}.`, 'success');
         });
       });
     }
@@ -4733,6 +4736,7 @@
       if (!email) { showToast('Enter an email address.'); return; }
       const btn = document.getElementById('testEmailSendBtn');
       btn.disabled = true;
+      btn.style.opacity = '0.35';
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (!session) { showToast('Not signed in.'); return; }
@@ -4742,15 +4746,16 @@
             'Authorization': `Bearer ${session.access_token}`,
             'x-force-send': '1',
             'x-test-email': email,
-            'x-subject-prefix': '[TEST] ',
+            'x-subject-prefix': '[TEST]',
           },
         });
-        if (res.ok) showToast(`Test email sent to ${email}.`);
+        if (res.ok) showToast(`Test email sent to ${email}.`, 'success');
         else showToast(`Send failed (${res.status}) — please try again.`);
       } catch {
         showToast('Send failed — please try again.');
       } finally {
         btn.disabled = false;
+        btn.style.opacity = '';
       }
     });
 
@@ -4764,7 +4769,7 @@
         { effective_date, frye_weekday, frye_weekend, cmvc_weekday, cmvc_weekend }
       );
       if (error) { showToast('Save rates failed — please try again.'); return; }
-      showToast('Rates saved.');
+      showToast('Rates saved.', 'success');
     });
 
     // ── Email recipients ───────────────────────────────────────────────────
@@ -4832,7 +4837,7 @@
       };
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
-      showToast('Practice info saved.');
+      showToast('Practice info saved.', 'success');
     });
 
     document.getElementById('ciScheduleSaveBtn').addEventListener('click', async () => {
@@ -4845,7 +4850,7 @@
       };
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
-      showToast('Schedule saved.');
+      showToast('Schedule saved.', 'success');
     });
 
     async function loadRecipients() {
@@ -5006,7 +5011,7 @@
             const prev = btn.innerHTML;
             btn.innerHTML = '✓';
             btn.classList.add('sub-btn-copied');
-            showToast('Link copied — paste into your calendar app to subscribe.');
+            showToast('Link copied — paste into your calendar app to subscribe.', 'success');
             setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
           });
         });
@@ -5020,7 +5025,7 @@
         const prev = btn.innerHTML;
         btn.innerHTML = '✓';
         btn.classList.add('sub-btn-copied');
-        showToast('Link copied — paste into your calendar app to subscribe.');
+        showToast('Link copied — paste into your calendar app to subscribe.', 'success');
         setTimeout(() => { btn.innerHTML = prev; btn.classList.remove('sub-btn-copied'); }, 2000);
       });
     });

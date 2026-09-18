@@ -236,8 +236,10 @@ Deno.serve(async (req) => {
 
   // ── Build email ───────────────────────────────────────────────────────────
   const weekLabel = `Week of ${fmtLong(monday)}`
-  const subjectPrefix = req.headers.get('x-subject-prefix') ?? ''
-  const subject = `${subjectPrefix}Call Schedule — ${weekLabel}`
+  // Header values have leading/trailing whitespace stripped in transit, so the
+  // separating space is added here rather than relying on the caller's header value.
+  const subjectPrefix = req.headers.get('x-subject-prefix')?.trim() ?? ''
+  const subject = `${subjectPrefix ? subjectPrefix + ' ' : ''}Call Schedule — ${weekLabel}`
 
   function cell(name: string): string {
     return name ? displayName(name) : '<span style="color:#B0BEC5">—</span>'
