@@ -3600,7 +3600,24 @@
       const iso = dow === 0 ? isoFromParts(y, m, d + 1) : isoFromParts(y, m, d);
       const ov = dailyCoverage[iso];
       const dayCall = (ov?.dayCall !== null && ov?.dayCall !== undefined) ? ov.dayCall : backupPersonForDay(y, m, d, dow);
-      if (!dayCall) return 'date-warn-backup';
+
+      // Backup coverage is only required on a double-call day — on a single-call day
+      // there's nothing to back up, so a missing or self-referential backup (the on-call
+      // person resolving as their own backup) isn't flagged.
+      function isOnCallDay(c) {
+        if (dow === 6) return c.oncall_am !== 'none';
+        if (dow === 0) return c.oncall_pm !== 'none';
+        return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
+      }
+      function isDoubleCallDay(c) {
+        if (dow === 6) return c.oncall_am === 'double';
+        if (dow === 0) return c.oncall_pm === 'double';
+        return c.oncall_am === 'double' || c.oncall_pm === 'double';
+      }
+      const callPerson = staff.find(p => isOnCallDay(getCell(y, m, d, p))) ?? '';
+      const backupRequired = !!callPerson && isDoubleCallDay(getCell(y, m, d, callPerson));
+
+      if (backupRequired && (!dayCall || dayCall === callPerson)) return 'date-warn-backup';
       if (!bariPersonForDay(y, m, d, dow)) return 'date-warn-bari';
       return '';
     }
