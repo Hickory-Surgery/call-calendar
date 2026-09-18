@@ -2082,6 +2082,17 @@
             </div>
           </div>
 
+          <div class="email-recipients-section admin-only" id="testNotifySection">
+            <div class="rates-section-title" id="testNotifyToggle" style="cursor:pointer;user-select:none">Send Test Change Digest ›</div>
+            <div id="testNotifyBody" style="display:none">
+              <label class="ci-label" style="display:block">Send to
+                <input type="email" id="testNotifyInput" class="ci-input" style="width:100%" autocomplete="off">
+              </label>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Shows what the assignment-change digest would currently send, for every affected person, all delivered to this one address instead — doesn't count as a real run.</div>
+              <button class="data-btn" id="testNotifySendBtn" style="margin-top:8px">&#x2709; Send test digest</button>
+            </div>
+          </div>
+
           <div class="rates-section admin-only" id="ratesSection">
             <div class="rates-section-title" id="ratesToggle" style="cursor:pointer;user-select:none">Call rates ›</div>
             <div id="ratesBody" style="display:none">
@@ -3154,7 +3165,7 @@
             date:            iso,
             day_call_id:     dayCallRow?.id ?? null,
             bari_id:         bariRow?.id    ?? null,
-            updated_by:      null,
+            updated_by:      currentUser?.id ?? null,
             updated_at:      new Date().toISOString(),
             day_call_manual: finalDayCallManual,
             bari_manual:     finalBariManual,
@@ -4554,7 +4565,7 @@
       if (admin || scheduler) loadCompanyInfo();
       if (admin) {
         fetchDeactivatedStaff().then(renderDeactivatedList);
-        fetchProfiles().then(renderUsersList);
+        fetchProfiles().then(() => { renderUsersList(); renderStaffList(); });
         fetchAuditLog();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
@@ -4563,6 +4574,7 @@
           document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
         });
         document.getElementById('testEmailInput').value = currentUser?.email ?? '';
+        document.getElementById('testNotifyInput').value = currentUser?.email ?? '';
       }
       if (admin || scheduler) loadRecipients();
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
@@ -4775,6 +4787,44 @@
       }
     });
 
+    document.getElementById('testNotifyToggle').addEventListener('click', () => {
+      const body = document.getElementById('testNotifyBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('testNotifyToggle').textContent = open ? 'Send Test Change Digest ›' : 'Send Test Change Digest ↓';
+    });
+
+    document.getElementById('testNotifySendBtn').addEventListener('click', async () => {
+      const email = document.getElementById('testNotifyInput').value.trim();
+      if (!email) { showToast('Enter an email address.'); return; }
+      const btn = document.getElementById('testNotifySendBtn');
+      btn.disabled = true;
+      btn.style.opacity = '0.35';
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) { showToast('Not signed in.'); return; }
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-assignment-changes`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'x-test-email': email,
+          },
+        });
+        if (res.ok) {
+          const body = await res.json();
+          const n = body.onCallEvents + body.coverageEvents;
+          showToast(n ? `Test digest sent — ${n} change(s) found.` : 'Test run complete — no changes found to report.', 'success');
+        } else {
+          showToast(`Send failed (${res.status}) — please try again.`);
+        }
+      } catch {
+        showToast('Send failed — please try again.');
+      } finally {
+        btn.disabled = false;
+        btn.style.opacity = '';
+      }
+    });
+
     document.getElementById('saveRatesBtn').addEventListener('click', async () => {
       const frye_weekday = parseFloat(document.getElementById('rateFryeWd').value) || 0;
       const frye_weekend = parseFloat(document.getElementById('rateFryeWe').value) || 0;
@@ -4942,6 +4992,10 @@
         }
         const startVal = row?.start_date ? row.start_date.slice(0, 10) : '';
         const stopVal  = row?.stop_date  ? row.stop_date.slice(0, 10)  : '';
+        const userIdVal = row?.user_id || '';
+        const accountOptions = profileRows.map(p =>
+          `<option value="${p.id}"${userIdVal === p.id ? ' selected' : ''}>${esc(p.email)}</option>`
+        ).join('');
         return `
         <div class="staff-item" draggable="true" data-idx="${i}" data-id="${row ? row.id : ''}">
           <div class="staff-item-main">
@@ -4953,12 +5007,18 @@
               Bari
             </label>
             ${subBtn}
-            <span class="staff-dates-toggle" title="Set start/stop dates" style="color:${startVal || stopVal ? '#1565C0' : ''}">&#8943;</span>
+            <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal ? '#1565C0' : ''}">&#8943;</span>
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
           <div class="staff-item-dates" style="display:none">
             <label class="staff-date-label">From <input type="date" class="staff-start" value="${startVal}" title="Start date (shown starting this month)"></label>
             <label class="staff-date-label">To <input type="date" class="staff-stop" value="${stopVal}" title="Stop date (hidden the month after)"></label>
+            <label class="staff-date-label">Account
+              <select class="staff-user-id" title="Login account to notify when this person's call assignments change">
+                <option value="">— none —</option>
+                ${accountOptions}
+              </select>
+            </label>
           </div>
         </div>`;
       }).join('');
@@ -5118,6 +5178,7 @@
         const stopVal  = item.querySelector('.staff-stop')?.value;
         const start_date = startVal || null;
         const stop_date  = stopVal  || null;
+        const user_id = item.querySelector('.staff-user-id')?.value || null;
         if (!short) continue;
 
         if (id) {
@@ -5129,6 +5190,7 @@
             sort_order: i,
             start_date,
             stop_date,
+            user_id,
           }).eq('id', id);
           if (error) { showToast('Staff save failed — please try again.'); return; }
         } else {
@@ -5140,6 +5202,7 @@
             active: true,
             start_date,
             stop_date,
+            user_id,
           }).select('id').single();
           if (error) { showToast('Staff save failed — please try again.'); return; }
           if (inserted) item.dataset.id = inserted.id;
