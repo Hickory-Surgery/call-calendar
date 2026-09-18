@@ -341,7 +341,16 @@ Deno.serve(async (req) => {
   // 3. Compose + send, one digest per affected person
   // ═══════════════════════════════════════════════════════════════════════
 
-  const allEvents = [...onCallEvents, ...coverageEvents]
+  // A weekday's on-call is two independent slots (am/pm) usually moved together by the
+  // whole-day drag, so the same swap can produce two events that read identically to the
+  // recipient (e.g. am and pm both "Now on call (was MC)") — collapse those into one line.
+  const seenEventKeys = new Set<string>()
+  const allEvents = [...onCallEvents, ...coverageEvents].filter(ev => {
+    const key = `${ev.person}|${ev.date}|${ev.role}|${ev.detail}|${ev.changedBy ?? ''}`
+    if (seenEventKeys.has(key)) return false
+    seenEventKeys.add(key)
+    return true
+  })
   const byPerson = new Map<string, NotifyEvent[]>()
   for (const ev of allEvents) {
     if (!byPerson.has(ev.person)) byPerson.set(ev.person, [])
