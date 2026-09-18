@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { resolveDayCall } from '../_shared/coverage.ts'
 
 const ASSIGN_LABEL: Record<string, string> = {
   'ov': 'OV', 'hosp': 'HOSP', 'C-surg': 'C-Surg', 'F-surg': 'F-Surg',
@@ -122,9 +123,12 @@ Deno.serve(async (req) => {
       return new Response('Invalid token', { status: 403 })
     }
 
-    const { data: staffRows } = await sb.from('staff').select('id, short_name').eq('active', true)
+    const { data: staffRows } = await sb.from('staff').select('id, short_name').eq('active', true).order('sort_order')
     // deno-lint-ignore no-explicit-any
     const nameById: Record<string, string> = Object.fromEntries((staffRows ?? []).map((r: any) => [r.id, r.short_name]))
+    // deno-lint-ignore no-explicit-any
+    const staffOrder: string[] = (staffRows ?? []).map((r: any) => r.short_name)
+    const firstStaffId: string | undefined = staffRows?.[0]?.id
 
     function push(map: Record<string, string[]>, date: string, name: string) {
       map[date] = [...(map[date] ?? []), name]
@@ -154,6 +158,27 @@ Deno.serve(async (req) => {
       }
     }
 
+    // CLOSED-day detection — same convention as the app: office is closed for a day if the
+    // first (by sort_order) staff member's cell is CLOSED. Needed so a closed day with no
+    // HOSP assignment and no override still shows a day-call entry (falls back to on-call).
+    const closedDates = new Set<string>()
+    if (firstStaffId) {
+      const { data: refRows } = await sb
+        .from('assignments')
+        .select('date, am, pm')
+        .eq('person_id', firstStaffId)
+      // deno-lint-ignore no-explicit-any
+      for (const row of (refRows ?? []) as any[]) {
+        const dow = new Date(row.date + 'T00:00:00Z').getUTCDay()
+        if (dow === 6) {
+          if (row.am === 'CLOSED') closedDates.add(row.date)
+          if (row.pm === 'CLOSED') closedDates.add(addDay(row.date, 1))
+        } else if (row.am === 'CLOSED') {
+          closedDates.add(row.date)
+        }
+      }
+    }
+
     // Day call and bari: read directly from daily_coverage (computed on every save)
     const { data: covRows } = await sb
       .from('daily_coverage')
@@ -174,18 +199,21 @@ Deno.serve(async (req) => {
     }
 
     const allDates = [...new Set([
-      ...Object.keys(oncallMap), ...Object.keys(dayCallMap), ...Object.keys(bariMap),
+      ...Object.keys(oncallMap), ...Object.keys(dayCallMap), ...Object.keys(bariMap), ...closedDates,
     ])].sort()
     const now = icalNow()
     const events: string[] = []
     for (const dateIso of allDates) {
-      const oncallNames = oncallMap[dateIso]  ?? []
-      const dayCallName = dayCallMap[dateIso]
-      const bariName    = bariMap[dateIso]
+      const oncallNames  = oncallMap[dateIso] ?? []
+      const onCallPerson = staffOrder.find(p => oncallNames.includes(p)) ?? ''
+      const dayClosed    = closedDates.has(dateIso)
+      const dayCallName  = resolveDayCall(dayCallMap[dateIso], dayClosed, onCallPerson)
+      const bariName     = bariMap[dateIso]
       const parts: string[] = []
       if (oncallNames.length) parts.push(`On Call: ${oncallNames.join(' · ')}`)
       if (dayCallName)        parts.push(`Day Call: ${dayCallName}`)
       if (bariName)           parts.push(`Bari: ${bariName}`)
+      if (!parts.length) continue
       events.push(buildEvent(`${dateIso}-oncall@hickory-surgery`, dateIso, parts.join(' | '), now))
     }
 

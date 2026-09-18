@@ -1,4 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { escapeHtml } from '../_shared/html.ts'
+import { resolveDayCall } from '../_shared/coverage.ts'
 
 // ── Date helpers ───────────────────────────────────────────────────────────
 
@@ -93,7 +95,7 @@ Deno.serve(async (req) => {
   // ── Fetch staff ───────────────────────────────────────────────────────────
   const { data: staffRows, error: staffErr } = await sb
     .from('staff')
-    .select('id, short_name, display_name, is_bariatric')
+    .select('id, short_name, display_name')
     .eq('active', true)
     .order('sort_order')
 
@@ -104,21 +106,21 @@ Deno.serve(async (req) => {
 
   const staffOrder: string[] = staffRows.map(r => r.short_name)
   const staffById: Record<string, typeof staffRows[number]> = Object.fromEntries(staffRows.map(r => [r.id, r]))
-  const bariatric = new Set(staffRows.filter(r => r.is_bariatric).map(r => r.short_name))
 
   function displayName(shortName: string): string {
     const row = staffRows.find(r => r.short_name === shortName)
     return row?.display_name || shortName || '—'
   }
 
-  // ── Fetch assignments Mon–Sat (weekend stored under Saturday) ─────────────
+  // ── Fetch assignments Mon–Sat (weekend stored under Saturday) — needed only
+  // for on-call and CLOSED-day detection; day-call/bari come from daily_coverage below.
   const { data: assignRows } = await sb
     .from('assignments')
-    .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
+    .select('date, person_id, am, pm, oncall_am, oncall_pm')
     .gte('date', iso(monday))
     .lte('date', iso(saturday))
 
-  type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string; exception: boolean }
+  type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string }
 
   // data[dateIso][shortName] = cell
   const data: Record<string, Record<string, Cell>> = {}
@@ -131,15 +133,17 @@ Deno.serve(async (req) => {
       pm: row.pm || '',
       oncall_am: row.oncall_am || 'none',
       oncall_pm: row.oncall_pm || 'none',
-      exception: row.exception ?? false,
     }
   }
 
   function getCell(dateIso: string, person: string): Cell {
-    return data[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false }
+    return data[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none' }
   }
 
   // ── Fetch daily_coverage Mon–Sun ─────────────────────────────────────────
+  // The app computes and persists day_call_id/bari_id (override or algorithm result) on
+  // every assignment save, so these are already the resolved values — no need to
+  // re-derive them here. See supabase/functions/_shared/coverage.ts.
   const { data: covRows } = await sb
     .from('daily_coverage')
     .select('date, day_call_id, bari_id')
@@ -150,60 +154,14 @@ Deno.serve(async (req) => {
   const coverage: Record<string, Coverage> = {}
   for (const row of covRows ?? []) {
     coverage[row.date] = {
-      // null = no override stored; algorithm fallback will apply. '' = explicitly cleared.
       dayCall: row.day_call_id !== null ? (staffById[row.day_call_id]?.short_name ?? '') : null,
       bari:    row.bari_id    !== null ? (staffById[row.bari_id]?.short_name    ?? '') : null,
     }
   }
 
-  // ── Bari computation helpers (mirrors app's bariPersonForDay logic) ──────
-  // Returns the assignments-based backup person (exception flag → hosp slot → Friday fallback).
-  function computeBackup(dataIso: string, dow: number): string {
-    const excPerson = staffOrder.find(p => data[dataIso]?.[p]?.exception) ?? ''
-    if (excPerson) return excPerson
-    const hospPerson = staffOrder.find(p => {
-      const c = data[dataIso]?.[p]
-      if (!c) return false
-      if (dow === 6) return c.am === 'hosp'
-      if (dow === 0) return c.pm === 'hosp'
-      return c.am === 'hosp' || c.pm === 'hosp'
-    }) ?? ''
-    if (hospPerson) return hospPerson
-    // Weekend: fall back to Friday's hosp person (Saturday data for both Sat/Sun)
-    if (dow === 0 || dow === 6) {
-      const friDataIso = iso(addDays(saturday, -1))
-      return staffOrder.find(p => {
-        const c = data[friDataIso]?.[p]
-        return c?.am === 'hosp' || c?.pm === 'hosp'
-      }) ?? ''
-    }
-    return ''
-  }
-
-  // Returns the day-call person: manual override if set, else hosp/exception backup.
-  function computeDayCall(covIso: string, dataIso: string, dow: number): string {
-    const manual = coverage[covIso]?.dayCall
-    if (manual !== null && manual !== undefined) return manual
-    return computeBackup(dataIso, dow)
-  }
-
-  // Returns the bari person: manual override if set, else on-call or backup if bariatric.
-  function computeBari(covIso: string, dataIso: string, dow: number, callPerson: string): string {
-    const manualBari = coverage[covIso]?.bari
-    if (manualBari !== null && manualBari !== undefined) return manualBari
-    if (bariatric.has(callPerson)) return callPerson
-    const backup = computeBackup(dataIso, dow)
-    if (bariatric.has(backup)) return backup
-    return ''
-  }
-
   // ── Compute per-day summaries ─────────────────────────────────────────────
-  type DaySummary = { date: Date; onCall: string; weekdayCall: string; backup: string; bari: string; closed: boolean }
+  type DaySummary = { date: Date; onCall: string; weekdayCall: string; bari: string; closed: boolean }
   const summaries: DaySummary[] = []
-
-  // Friday's day_call is the fallback backup for the weekend
-  const friIso = iso(addDays(monday, 4))
-  const fridayBackup = coverage[friIso]?.dayCall ?? ''
 
   for (const day of days) {
     const dow = day.getUTCDay() // 0=Sun, 6=Sat
@@ -231,19 +189,15 @@ Deno.serve(async (req) => {
     // On call: first person with oncall set for this day's slot
     const callPerson = staffOrder.find(p => isOnCall(getCell(dataIso, p))) ?? ''
 
-    // Weekday call: HOSP/exception person — blank on weekends.
-    // On a CLOSED day, bypass the stored day_call_id override and check actual HOSP assignments;
-    // if none, fall back to the on-call person (holiday arrangement).
-    const weekdayCall = isWeekend ? '' :
-      (dayClosed ? (computeBackup(dataIso, dow) || callPerson) : computeDayCall(covIso, dataIso, dow))
-    const backup      = isWeekend ? fridayBackup : computeDayCall(covIso, dataIso, dow)
+    // Weekday call: override/algorithm result from daily_coverage; on a CLOSED day with
+    // nothing stored, fall back to the on-call person (holiday arrangement). Blank on weekends.
+    const weekdayCall = isWeekend ? '' : resolveDayCall(coverage[covIso]?.dayCall, dayClosed, callPerson)
 
     summaries.push({
       date: day,
       onCall: callPerson,
       weekdayCall,
-      backup,
-      bari: computeBari(covIso, dataIso, dow, callPerson),
+      bari: coverage[covIso]?.bari ?? '',
       closed: dayClosed,
     })
   }
@@ -268,15 +222,15 @@ Deno.serve(async (req) => {
 
   // Company header block (only rendered when data is present)
   const logoHtml = co?.logo_url
-    ? `<img src="${co.logo_url}" alt="${co?.name ?? ''}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;margin-bottom:8px">`
+    ? `<img src="${escapeHtml(co.logo_url)}" alt="${escapeHtml(co?.name ?? '')}" style="max-height:56px;max-width:180px;object-fit:contain;display:block;margin-bottom:8px">`
     : ''
   const practiceHtml = co?.name
     ? `<div style="margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #ECEFF1">
         ${logoHtml}
-        <div style="font-size:1rem;font-weight:700;color:#37474F">${co.name}</div>
-        ${co?.address  ? `<div style="font-size:0.8rem;color:#607D8B;white-space:pre-line">${co.address}</div>` : ''}
+        <div style="font-size:1rem;font-weight:700;color:#37474F">${escapeHtml(co.name)}</div>
+        ${co?.address  ? `<div style="font-size:0.8rem;color:#607D8B;white-space:pre-line">${escapeHtml(co.address)}</div>` : ''}
         <div style="font-size:0.8rem;color:#607D8B;margin-top:4px">
-          ${co?.phone ? `Phone: ${co.phone}` : ''}${co?.phone && co?.fax ? '&ensp;·&ensp;' : ''}${co?.fax ? `Fax: ${co.fax}` : ''}
+          ${co?.phone ? `Phone: ${escapeHtml(co.phone)}` : ''}${co?.phone && co?.fax ? '&ensp;·&ensp;' : ''}${co?.fax ? `Fax: ${escapeHtml(co.fax)}` : ''}
         </div>
       </div>`
     : ''
@@ -299,8 +253,8 @@ Deno.serve(async (req) => {
   </table>
   <p style="font-size:0.75rem;color:#90A4AE;margin-top:20px">
     <a href="https://hickory-surgery.github.io/call-calendar/" style="color:#1565C0">View full calendar</a>
-    ${co?.office_manager ? `&ensp;·&ensp;Office Mgr: ${co.office_manager}` : ''}
-    ${co?.scheduling_coordinator ? `&ensp;·&ensp;Scheduling: ${co.scheduling_coordinator}` : ''}
+    ${co?.office_manager ? `&ensp;·&ensp;Office Mgr: ${escapeHtml(co.office_manager)}` : ''}
+    ${co?.scheduling_coordinator ? `&ensp;·&ensp;Scheduling: ${escapeHtml(co.scheduling_coordinator)}` : ''}
   </p>
 </body></html>`
 
