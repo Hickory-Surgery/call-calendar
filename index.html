@@ -2579,17 +2579,24 @@
     }
 
     async function fetchDailyCoverage() {
-      const { data: rows } = await sb.from('daily_coverage').select('date, day_call_id, bari_id, bari_class_id, day_call_manual, bari_manual, bari_class_manual');
       dailyCoverage = {};
-      for (const row of rows ?? []) {
-        dailyCoverage[row.date] = {
-          dayCall:        row.day_call_id       ? (staffById[row.day_call_id]?.short_name       ?? '') : null,
-          bari:           row.bari_id           ? (staffById[row.bari_id]?.short_name           ?? '') : null,
-          bariClass:      row.bari_class_id     ? (staffById[row.bari_class_id]?.short_name     ?? '') : null,
-          dayCallManual:  !!row.day_call_manual,
-          bariManual:     !!row.bari_manual,
-          bariClassManual: !!row.bari_class_manual,
-        };
+      const PAGE = 1000;
+      for (let offset = 0; ; offset += PAGE) {
+        const { data: rows, error } = await sb.from('daily_coverage')
+          .select('date, day_call_id, bari_id, bari_class_id, day_call_manual, bari_manual, bari_class_manual')
+          .range(offset, offset + PAGE - 1);
+        if (error) { console.error('fetchDailyCoverage error:', error); return; }
+        for (const row of rows ?? []) {
+          dailyCoverage[row.date] = {
+            dayCall:        row.day_call_id       ? (staffById[row.day_call_id]?.short_name       ?? '') : null,
+            bari:           row.bari_id           ? (staffById[row.bari_id]?.short_name           ?? '') : null,
+            bariClass:      row.bari_class_id     ? (staffById[row.bari_class_id]?.short_name     ?? '') : null,
+            dayCallManual:  !!row.day_call_manual,
+            bariManual:     !!row.bari_manual,
+            bariClassManual: !!row.bari_class_manual,
+          };
+        }
+        if ((rows?.length ?? 0) < PAGE) break;
       }
     }
 
@@ -2983,7 +2990,8 @@
     function setCell(y, m, d, person, val) {
       const key = cellKey(y, m, d, person);
       const prev = data[key];
-      undoStack.push({ y, m, d, person, prev });
+      const undoEntry = { y, m, d, person, prev };
+      undoStack.push(undoEntry);
       if (undoStack.length > UNDO_LIMIT) undoStack.shift();
       data[key] = val;
       const staffRow = staffByShortName[person];
@@ -2997,6 +3005,8 @@
         }, { onConflict: 'date,person_id' }).then(({ error }) => {
           if (error) {
             if (prev !== undefined) data[key] = prev; else delete data[key];
+            const idx = undoStack.indexOf(undoEntry);
+            if (idx !== -1) undoStack.splice(idx, 1);
             render();
             showToast('Save failed — please try again.');
           } else {
@@ -3009,7 +3019,8 @@
     function clearCell(y, m, d, person) {
       const key = cellKey(y, m, d, person);
       const prev = data[key];
-      undoStack.push({ y, m, d, person, prev });
+      const undoEntry = { y, m, d, person, prev };
+      undoStack.push(undoEntry);
       if (undoStack.length > UNDO_LIMIT) undoStack.shift();
       delete data[key];
       const staffRow = staffByShortName[person];
@@ -3021,6 +3032,8 @@
           .then(({ error }) => {
             if (error) {
               if (prev !== undefined) data[key] = prev;
+              const idx = undoStack.indexOf(undoEntry);
+              if (idx !== -1) undoStack.splice(idx, 1);
               render();
               showToast('Delete failed — please try again.');
             } else {
@@ -5553,13 +5566,18 @@
         return c.oncall_am !== 'none' || c.oncall_pm !== 'none';
       }) || '';
 
-      // Backup and bari: use shared helpers so overrides are respected.
+      // Backup and bari: dailyCoverage override takes priority (matches dayCoverageClass);
+      // on a CLOSED day with nothing stored, fall back to the on-call person (holiday arrangement).
       // Day Call has no meaning on weekends — show "—" on Sat/Sun.
-      const isWeekend = dow === 0 || dow === 6;
-      const backupRaw    = isWeekend ? null : backupPersonForDay(ty, tm, td, dow);
-      const dayClosed    = !isWeekend && staff.length > 0 && getCell(ty, tm, td, staff[0]).am === 'CLOSED';
-      // On a CLOSED day with no HOSP assignment, the on-call person covers day call (holiday arrangement).
-      const backupPerson = (dayClosed && !backupRaw) ? callPerson : backupRaw;
+      const isWeekend  = dow === 0 || dow === 6;
+      const dayClosed  = !isWeekend && staff.length > 0 && getCell(ty, tm, td, staff[0]).am === 'CLOSED';
+      const cov        = dailyCoverage[dow === 0 ? isoFromParts(ty, tm, td + 1) : isoFromParts(ty, tm, td)];
+      const storedBackup = (cov?.dayCall !== null && cov?.dayCall !== undefined) ? cov.dayCall : null;
+      const algoBackup   = isWeekend ? '' : backupPersonForDay(ty, tm, td, dow);
+      const backupPerson = isWeekend ? null
+        : storedBackup !== null ? storedBackup
+        : (dayClosed && !algoBackup) ? callPerson
+        : algoBackup;
       const bariPerson      = bariPersonForDay(ty, tm, td, dow);
       function set(id, name) {
         const el = document.getElementById(id);
