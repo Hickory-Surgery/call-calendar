@@ -1072,10 +1072,15 @@
 
     .staff-item-dates {
       display: flex;
+      flex-wrap: wrap;
       gap: 14px;
       padding-left: 28px;
       margin-top: 5px;
       margin-bottom: 2px;
+    }
+
+    .staff-account-label {
+      flex-basis: 100%;
     }
 
     .staff-dates-toggle {
@@ -5007,13 +5012,14 @@
               Bari
             </label>
             ${subBtn}
+            ${!userIdVal ? '<span class="pending-badge" title="No login account linked — this person won\'t receive assignment-change emails">No account</span>' : ''}
             <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal ? '#1565C0' : ''}">&#8943;</span>
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
           <div class="staff-item-dates" style="display:none">
             <label class="staff-date-label">From <input type="date" class="staff-start" value="${startVal}" title="Start date (shown starting this month)"></label>
             <label class="staff-date-label">To <input type="date" class="staff-stop" value="${stopVal}" title="Stop date (hidden the month after)"></label>
-            <label class="staff-date-label">Account
+            <label class="staff-date-label staff-account-label">Account
               <select class="staff-user-id" title="Login account to notify when this person's call assignments change">
                 <option value="">— none —</option>
                 ${accountOptions}
