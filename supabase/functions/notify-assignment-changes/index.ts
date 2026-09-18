@@ -35,11 +35,11 @@ function fmtWhen(iso: string | null): string {
   return new Date(iso).toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC'
 }
 
-type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string }
+type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string; exception: boolean }
 type NotifyEvent = {
   person: string
   date: string
-  role: 'On call' | 'Backup' | 'Bari'
+  role: 'On call' | 'Backup' | 'Bari' | 'Day call (exception)'
   detail: string
   changedBy: string | null
   changedAt: string | null
@@ -241,7 +241,7 @@ Deno.serve(async (req) => {
   // look back to its Saturday row (weekend storage: Saturday holds both days' data).
   const { data: assignRangeRows } = await sb
     .from('assignments')
-    .select('date, person_id, am, pm, oncall_am, oncall_pm')
+    .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
     .gte('date', addDay(yesterday, -1))
     .lte('date', maxDate)
 
@@ -253,10 +253,11 @@ Deno.serve(async (req) => {
     cellData[row.date][person] = {
       am: row.am || '', pm: row.pm || '',
       oncall_am: row.oncall_am || 'none', oncall_pm: row.oncall_pm || 'none',
+      exception: !!row.exception,
     }
   }
   function getCell(dateIso: string, person: string): Cell {
-    return cellData[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none' }
+    return cellData[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false }
   }
 
   const { data: covRows } = await sb
@@ -278,13 +279,23 @@ Deno.serve(async (req) => {
   const coverageEvents: NotifyEvent[] = []
   const newSnapshotRows: Array<{ date: string; backup_id: string | null; bari_id: string | null; updated_at: string }> = []
 
-  function diffRole(role: 'Backup' | 'Bari', date: string, prevId: string | null, newId: string | null, changedBy: string | null, changedAt: string | null) {
+  // incomingLabel/incomingContext apply only to the "now assigned" (incoming) side — we
+  // can only know the current, live exception status, not retroactively whether the
+  // outgoing person's assignment was exception-driven, so the outgoing side always uses
+  // the plain role label.
+  function diffRole(
+    role: 'Backup' | 'Bari', date: string, prevId: string | null, newId: string | null,
+    changedBy: string | null, changedAt: string | null,
+    incomingLabel?: NotifyEvent['role'], incomingContext?: string,
+  ) {
     if (prevId === newId) return
     // Resolve against active staff only — a snapshot can reference someone since
     // deactivated. Notify whichever side still resolves; skip the side that doesn't
     // rather than pushing an unresolvable person (which would crash the grouping below).
     const prevName = prevId ? staffById[prevId]?.short_name ?? null : null
     const newName = newId ? staffById[newId]?.short_name ?? null : null
+    const newRole = incomingLabel ?? role
+    const ctx = incomingContext ? ` — ${incomingContext}` : ''
     if (!prevId && newId) return // blank -> value: silent, initial entry
     if (prevId && !newId) {
       if (!prevName) return
@@ -299,7 +310,7 @@ Deno.serve(async (req) => {
         changedBy, changedAt,
       })
       if (newName) coverageEvents.push({
-        person: newName, date, role, detail: `Now assigned (was ${prevName ?? 'someone else'})`,
+        person: newName, date, role: newRole, detail: `Now assigned (was ${prevName ?? 'someone else'})${ctx}`,
         changedBy, changedAt,
       })
     }
@@ -330,8 +341,22 @@ Deno.serve(async (req) => {
     const resolvedBackupShort = resolveDayCall(cov?.day_call_id ? rawBackupShort : null, dayClosed, callPerson)
     const resolvedBackupId = resolvedBackupShort ? staffByShortName[resolvedBackupShort]?.id ?? null : null
 
+    // exception means day call for that day even though someone else (or no one) has
+    // on-call — a deliberate manual carve-out, distinct from the normal HOSP-derived
+    // day call. Only checkable for the *incoming* person — see diffRole's comment.
+    const newBackupIsException = resolvedBackupShort ? getCell(dataIso, resolvedBackupShort).exception : false
+    let incomingLabel: NotifyEvent['role'] | undefined
+    let incomingContext: string | undefined
+    if (newBackupIsException) {
+      incomingLabel = 'Day call (exception)'
+      if (callPerson) {
+        const onCallTerm = (dow === 0 || dow === 6) ? 'has on-call' : 'has on-call/night call'
+        incomingContext = `${callPerson} ${onCallTerm}`
+      }
+    }
+
     const snap = snapByDate[d]
-    diffRole('Backup', d, snap?.backup_id ?? null, resolvedBackupId, cov?.updated_by ?? null, cov?.updated_at ?? null)
+    diffRole('Backup', d, snap?.backup_id ?? null, resolvedBackupId, cov?.updated_by ?? null, cov?.updated_at ?? null, incomingLabel, incomingContext)
     diffRole('Bari', d, snap?.bari_id ?? null, cov?.bari_id ?? null, cov?.updated_by ?? null, cov?.updated_at ?? null)
 
     newSnapshotRows.push({ date: d, backup_id: resolvedBackupId, bari_id: cov?.bari_id ?? null, updated_at: nowIso })
