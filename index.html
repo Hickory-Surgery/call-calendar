@@ -2198,6 +2198,10 @@
 
         <div class="tab-panel" id="tab-log">
           <div class="audit-sort-row">
+            <button class="audit-sort-btn audit-filter-btn active" data-filter="all">All</button>
+            <button class="audit-sort-btn audit-filter-btn" data-filter="changes">Changes only</button>
+          </div>
+          <div class="audit-sort-row">
             <button class="audit-sort-btn active" data-sort="changed_at">By change time</button>
             <button class="audit-sort-btn" data-sort="calendar_date">By calendar date</button>
           </div>
@@ -2709,11 +2713,12 @@
     let auditRows = [];
     let auditSortBy = 'changed_at';
     let auditSortDir = 'desc';
+    let auditOpFilter = 'all'; // 'all' | 'changes' (excludes routine initial-entry INSERTs)
 
     async function fetchAuditLog() {
-      const { data, error } = await sb
-        .from('audit_log')
-        .select('*')
+      let query = sb.from('audit_log').select('*');
+      if (auditOpFilter === 'changes') query = query.in('operation', ['UPDATE', 'DELETE']);
+      const { data, error } = await query
         .order('changed_at', { ascending: false })
         .limit(200);
       if (error) { console.error('audit_log fetch:', error.message); return; }
@@ -2760,8 +2765,12 @@
       const container = document.getElementById('auditLogList');
       if (!container) return;
 
+      document.querySelectorAll('.audit-filter-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.filter === auditOpFilter);
+      });
+
       const SORT_LABELS = { changed_at: 'By change time', calendar_date: 'By calendar date' };
-      document.querySelectorAll('.audit-sort-btn').forEach(btn => {
+      document.querySelectorAll('.audit-sort-btn:not(.audit-filter-btn)').forEach(btn => {
         const isActive = btn.dataset.sort === auditSortBy;
         btn.classList.toggle('active', isActive);
         btn.textContent = SORT_LABELS[btn.dataset.sort] + (isActive ? (auditSortDir === 'desc' ? ' ⌄' : ' ^') : '');
@@ -2818,6 +2827,13 @@
     }
 
     document.getElementById('tab-log').addEventListener('click', e => {
+      const filterBtn = e.target.closest('.audit-filter-btn');
+      if (filterBtn) {
+        if (filterBtn.dataset.filter === auditOpFilter) return;
+        auditOpFilter = filterBtn.dataset.filter;
+        fetchAuditLog();
+        return;
+      }
       const btn = e.target.closest('.audit-sort-btn');
       if (!btn) return;
       if (btn.dataset.sort === auditSortBy) {
