@@ -80,21 +80,25 @@ Deno.serve(async (req) => {
   // ── Staff / account lookups ───────────────────────────────────────────────
   const { data: staffRows } = await sb
     .from('staff')
-    .select('id, short_name, user_id')
+    .select('id, short_name, user_id, email')
     .eq('active', true)
     .order('sort_order')
 
-  const staffById: Record<string, { id: string; short_name: string; user_id: string | null }> =
+  const staffById: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.id, r]))
-  const staffByShortName: Record<string, { id: string; short_name: string; user_id: string | null }> =
+  const staffByShortName: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.short_name, r]))
 
   const { data: profileRows } = await sb.from('profiles').select('id, email')
   const emailByUserId: Record<string, string> = Object.fromEntries((profileRows ?? []).map(p => [p.id, p.email]))
 
+  // Linked account takes priority (stays accurate automatically); the manually-entered
+  // email is a fallback for staff with no login.
   function emailFor(shortName: string): string | null {
-    const uid = staffByShortName[shortName]?.user_id
-    return uid ? (emailByUserId[uid] ?? null) : null
+    const row = staffByShortName[shortName]
+    if (!row) return null
+    if (row.user_id && emailByUserId[row.user_id]) return emailByUserId[row.user_id]
+    return row.email ?? null
   }
   function labelForChanger(uid: string | null): string {
     if (!uid) return 'System (automatic recalculation)'

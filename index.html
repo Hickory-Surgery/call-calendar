@@ -4998,6 +4998,8 @@
         const startVal = row?.start_date ? row.start_date.slice(0, 10) : '';
         const stopVal  = row?.stop_date  ? row.stop_date.slice(0, 10)  : '';
         const userIdVal = row?.user_id || '';
+        const emailVal = row?.email || '';
+        const useEmailFallback = !userIdVal && !!emailVal;
         const accountOptions = profileRows.map(p =>
           `<option value="${p.id}"${userIdVal === p.id ? ' selected' : ''}>${esc(p.email)}</option>`
         ).join('');
@@ -5012,8 +5014,8 @@
               Bari
             </label>
             ${subBtn}
-            ${!userIdVal ? '<span class="pending-badge" title="No login account linked — this person won\'t receive assignment-change emails">No account</span>' : ''}
-            <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal ? '#1565C0' : ''}">&#8943;</span>
+            ${(!userIdVal && !emailVal) ? '<span class="pending-badge" title="No login account or email on file — this person won\'t receive assignment-change emails">No email</span>' : ''}
+            <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal || emailVal ? '#1565C0' : ''}">&#8943;</span>
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
           <div class="staff-item-dates" style="display:none">
@@ -5022,8 +5024,10 @@
             <label class="staff-date-label staff-account-label">Account
               <select class="staff-user-id" title="Login account to notify when this person's call assignments change">
                 <option value="">— none —</option>
+                <option value="__email__"${useEmailFallback ? ' selected' : ''}>Enter email…</option>
                 ${accountOptions}
               </select>
+              <input type="email" class="staff-email-fallback" value="${esc(emailVal)}" placeholder="email@example.com" style="display:${useEmailFallback ? '' : 'none'}">
             </label>
           </div>
         </div>`;
@@ -5046,6 +5050,13 @@
           const item = cb.closest('.staff-item');
           const name = item.querySelector('input[type="text"]').value.trim();
           if (name) { bariatric[name] = cb.checked; }
+        });
+      });
+
+      list.querySelectorAll('.staff-user-id').forEach(sel => {
+        sel.addEventListener('change', () => {
+          const emailInput = sel.closest('.staff-account-label').querySelector('.staff-email-fallback');
+          emailInput.style.display = sel.value === '__email__' ? '' : 'none';
         });
       });
 
@@ -5184,7 +5195,11 @@
         const stopVal  = item.querySelector('.staff-stop')?.value;
         const start_date = startVal || null;
         const stop_date  = stopVal  || null;
-        const user_id = item.querySelector('.staff-user-id')?.value || null;
+        const accountVal = item.querySelector('.staff-user-id')?.value || '';
+        const user_id = (accountVal && accountVal !== '__email__') ? accountVal : null;
+        const email = accountVal === '__email__'
+          ? (item.querySelector('.staff-email-fallback')?.value.trim() || null)
+          : null;
         if (!short) continue;
 
         if (id) {
@@ -5197,6 +5212,7 @@
             start_date,
             stop_date,
             user_id,
+            email,
           }).eq('id', id);
           if (error) { showToast('Staff save failed — please try again.'); return; }
         } else {
@@ -5209,6 +5225,7 @@
             start_date,
             stop_date,
             user_id,
+            email,
           }).select('id').single();
           if (error) { showToast('Staff save failed — please try again.'); return; }
           if (inserted) item.dataset.id = inserted.id;
