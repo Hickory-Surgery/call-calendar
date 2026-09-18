@@ -38,17 +38,49 @@ function fmtLong(d: Date): string {
 
 // ── Main ───────────────────────────────────────────────────────────────────
 
+// Only the browser (admin test-send) is a cross-origin caller — pg_cron's server-to-server
+// call isn't subject to CORS. Headers list covers both the auth token and this function's
+// custom headers.
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, content-type, x-test-email, x-force-send, x-subject-prefix',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 Deno.serve(async (req) => {
-  // Authenticate with shared cron secret
-  const secret = Deno.env.get('CRON_SECRET')
-  if (!secret || req.headers.get('x-cron-secret') !== secret) {
-    return new Response('Unauthorized', { status: 401 })
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: CORS })
   }
 
   const sb = createClient(
     Deno.env.get('SUPABASE_URL')!,
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
   )
+
+  // Authenticate: either the shared cron secret (pg_cron's scheduled call), or an
+  // admin's own session (manual "send test email" from Settings). The admin path is
+  // restricted to test sends only — it can never trigger the real recipient list.
+  const secret = Deno.env.get('CRON_SECRET')
+  const cronOk = !!secret && req.headers.get('x-cron-secret') === secret
+
+  let adminOk = false
+  if (!cronOk) {
+    const authHeader = req.headers.get('Authorization') ?? ''
+    if (authHeader.startsWith('Bearer ')) {
+      const { data: { user } } = await sb.auth.getUser(authHeader.slice(7))
+      if (user) {
+        const { data: profile } = await sb.from('profiles').select('role').eq('id', user.id).maybeSingle()
+        adminOk = profile?.role === 'admin'
+      }
+    }
+  }
+
+  if (!cronOk && !adminOk) {
+    return new Response('Unauthorized', { status: 401, headers: CORS })
+  }
+  if (adminOk && !req.headers.get('x-test-email')) {
+    return new Response('x-test-email is required for admin-triggered sends', { status: 400, headers: CORS })
+  }
 
   // ── Fetch company info ────────────────────────────────────────────────────
   const { data: co } = await sb.from('company_info').select('*').eq('id', 1).maybeSingle()
@@ -60,12 +92,12 @@ Deno.serve(async (req) => {
     // If no schedule configured, refuse to send (must force)
     if (co?.email_day == null || !co?.email_time) {
       console.log('No schedule configured — set email_day and email_time in Practice settings')
-      return new Response('No schedule configured', { status: 200 })
+      return new Response('No schedule configured', { status: 200, headers: CORS })
     }
     // Check day of week (UTC)
     if (now.getUTCDay() !== co.email_day) {
       console.log(`Not send day (today=${now.getUTCDay()}, configured=${co.email_day})`)
-      return new Response('Not send day', { status: 200 })
+      return new Response('Not send day', { status: 200, headers: CORS })
     }
     // Check time window: within 29 minutes of configured time (tolerates 30-min cron intervals)
     const [schedHH, schedMM] = (co.email_time as string).slice(0, 5).split(':').map(Number)
@@ -73,7 +105,7 @@ Deno.serve(async (req) => {
     const nowMinutes   = now.getUTCHours() * 60 + now.getUTCMinutes()
     if (nowMinutes < schedMinutes || nowMinutes >= schedMinutes + 29) {
       console.log(`Outside time window (now=${nowMinutes}, sched=${schedMinutes})`)
-      return new Response('Outside time window', { status: 200 })
+      return new Response('Outside time window', { status: 200, headers: CORS })
     }
     // Deduplication: skip if already sent within the last 6 hours
     if (co.email_last_sent) {
@@ -81,7 +113,7 @@ Deno.serve(async (req) => {
       const hoursSince = (now.getTime() - lastSent.getTime()) / 3_600_000
       if (hoursSince < 6) {
         console.log(`Already sent ${hoursSince.toFixed(1)}h ago — skipping`)
-        return new Response('Already sent recently', { status: 200 })
+        return new Response('Already sent recently', { status: 200, headers: CORS })
       }
     }
   }
@@ -101,7 +133,7 @@ Deno.serve(async (req) => {
 
   if (staffErr || !staffRows?.length) {
     console.error('No staff:', staffErr?.message)
-    return new Response('No staff', { status: 200 })
+    return new Response('No staff', { status: 200, headers: CORS })
   }
 
   const staffOrder: string[] = staffRows.map(r => r.short_name)
@@ -285,7 +317,7 @@ Deno.serve(async (req) => {
 
     if (!recipientRows?.length) {
       console.log('No email recipients configured')
-      return new Response('No recipients', { status: 200 })
+      return new Response('No recipients', { status: 200, headers: CORS })
     }
 
     recipientEmails = recipientRows.map(r => r.email)
@@ -316,5 +348,5 @@ Deno.serve(async (req) => {
     await sb.from('company_info').update({ email_last_sent: now.toISOString() }).eq('id', 1)
   }
 
-  return new Response(res.ok ? 'OK' : 'Email failed', { status: res.ok ? 200 : 500 })
+  return new Response(res.ok ? 'OK' : 'Email failed', { status: res.ok ? 200 : 500, headers: CORS })
 })

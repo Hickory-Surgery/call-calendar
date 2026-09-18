@@ -2069,6 +2069,16 @@
             </div>
           </div>
 
+          <div class="email-recipients-section admin-only" id="testEmailSection">
+            <div class="rates-section-title" id="testEmailToggle" style="cursor:pointer;user-select:none">Send Test Email ›</div>
+            <div id="testEmailBody" style="display:none">
+              <label class="ci-label" style="display:block">Send to
+                <input type="email" id="testEmailInput" class="ci-input" style="width:100%" autocomplete="off">
+              </label>
+              <button class="data-btn" id="testEmailSendBtn" style="margin-top:8px">&#x2709; Send test email</button>
+            </div>
+          </div>
+
           <div class="rates-section admin-only" id="ratesSection">
             <div class="rates-section-title" id="ratesToggle" style="cursor:pointer;user-select:none">Call rates ›</div>
             <div id="ratesBody" style="display:none">
@@ -4533,6 +4543,7 @@
           document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
           document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
         });
+        document.getElementById('testEmailInput').value = currentUser?.email ?? '';
       }
       if (admin || scheduler) loadRecipients();
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
@@ -4708,6 +4719,39 @@
       const open = body.style.display !== 'none';
       body.style.display = open ? 'none' : '';
       document.getElementById('ratesToggle').textContent = open ? 'Call rates ›' : 'Call rates ↓';
+    });
+
+    document.getElementById('testEmailToggle').addEventListener('click', () => {
+      const body = document.getElementById('testEmailBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('testEmailToggle').textContent = open ? 'Send Test Email ›' : 'Send Test Email ↓';
+    });
+
+    document.getElementById('testEmailSendBtn').addEventListener('click', async () => {
+      const email = document.getElementById('testEmailInput').value.trim();
+      if (!email) { showToast('Enter an email address.'); return; }
+      const btn = document.getElementById('testEmailSendBtn');
+      btn.disabled = true;
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) { showToast('Not signed in.'); return; }
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/weekly-email`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'x-force-send': '1',
+            'x-test-email': email,
+            'x-subject-prefix': '[TEST] ',
+          },
+        });
+        if (res.ok) showToast(`Test email sent to ${email}.`);
+        else showToast(`Send failed (${res.status}) — please try again.`);
+      } catch {
+        showToast('Send failed — please try again.');
+      } finally {
+        btn.disabled = false;
+      }
     });
 
     document.getElementById('saveRatesBtn').addEventListener('click', async () => {
