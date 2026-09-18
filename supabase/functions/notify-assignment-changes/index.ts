@@ -168,10 +168,34 @@ Deno.serve(async (req) => {
     pushSlot('pm', oldPm, newPm)
   }
 
+  // Collapse multiple edits to the same (person, date, slot) within this window into a
+  // single net transition (earliest "from" -> latest "to"), dropping it entirely if it
+  // nets to no change. Otherwise a change-then-revert — or a multi-hop chain, e.g.
+  // KP->MC then MC->JH — would replay every intermediate hop (MC would get notified
+  // about an assignment they never actually ended up holding) instead of reporting the
+  // true before/after for each person.
+  const netGroups = new Map<string, RawTransition[]>()
+  for (const t of rawTransitions) {
+    const key = `${t.person}|${t.date}|${t.slot}`
+    if (!netGroups.has(key)) netGroups.set(key, [])
+    netGroups.get(key)!.push(t)
+  }
+  const nettedTransitions: RawTransition[] = []
+  for (const group of netGroups.values()) {
+    const first = group[0]
+    const last = group[group.length - 1]
+    if (first.from === last.to) continue
+    nettedTransitions.push({
+      date: first.date, slot: first.slot, person: first.person,
+      from: first.from, to: last.to,
+      changedBy: last.changedBy, changedAt: last.changedAt,
+    })
+  }
+
   const onCallEvents: NotifyEvent[] = []
-  const losses = rawTransitions.filter(t => t.from !== 'none' && t.to === 'none')
-  const gains = rawTransitions.filter(t => t.from === 'none' && t.to !== 'none')
-  const ownChanges = rawTransitions.filter(t => t.from !== 'none' && t.to !== 'none' && t.from !== t.to)
+  const losses = nettedTransitions.filter(t => t.from !== 'none' && t.to === 'none')
+  const gains = nettedTransitions.filter(t => t.from === 'none' && t.to !== 'none')
+  const ownChanges = nettedTransitions.filter(t => t.from !== 'none' && t.to !== 'none' && t.from !== t.to)
   const pairedGainIdx = new Set<number>()
 
   for (const loss of losses) {
