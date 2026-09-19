@@ -2104,6 +2104,17 @@
             </div>
           </div>
 
+          <div class="email-recipients-section admin-only" id="testGapsSection">
+            <div class="rates-section-title" id="testGapsToggle" style="cursor:pointer;user-select:none">Send Test Coverage Check ›</div>
+            <div id="testGapsBody" style="display:none">
+              <label class="ci-label" style="display:block">Send to
+                <input type="email" id="testGapsInput" class="ci-input" style="width:100%" autocomplete="off">
+              </label>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Checks next week's schedule for coverage gaps right now and sends the result to this one address — doesn't count as a real run or wait for the scheduled day.</div>
+              <button class="data-btn" id="testGapsSendBtn" style="margin-top:8px">&#x2709; Send test check</button>
+            </div>
+          </div>
+
           <div class="rates-section admin-only" id="ratesSection">
             <div class="rates-section-title" id="ratesToggle" style="cursor:pointer;user-select:none">Call rates ›</div>
             <div id="ratesBody" style="display:none">
@@ -4603,6 +4614,7 @@
         });
         document.getElementById('testEmailInput').value = currentUser?.email ?? '';
         document.getElementById('testNotifyInput').value = currentUser?.email ?? '';
+        document.getElementById('testGapsInput').value = currentUser?.email ?? '';
       }
       if (admin || scheduler) loadRecipients();
       document.getElementById('accountPublic').style.display = currentUser ? 'none' : 'block';
@@ -4842,6 +4854,43 @@
           const body = await res.json();
           const n = body.onCallEvents + body.coverageEvents;
           showToast(n ? `Test digest sent — ${n} change(s) found.` : 'Test run complete — no changes found to report.', 'success');
+        } else {
+          showToast(`Send failed (${res.status}) — please try again.`);
+        }
+      } catch {
+        showToast('Send failed — please try again.');
+      } finally {
+        btn.disabled = false;
+        btn.style.opacity = '';
+      }
+    });
+
+    document.getElementById('testGapsToggle').addEventListener('click', () => {
+      const body = document.getElementById('testGapsBody');
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : '';
+      document.getElementById('testGapsToggle').textContent = open ? 'Send Test Coverage Check ›' : 'Send Test Coverage Check ↓';
+    });
+
+    document.getElementById('testGapsSendBtn').addEventListener('click', async () => {
+      const email = document.getElementById('testGapsInput').value.trim();
+      if (!email) { showToast('Enter an email address.'); return; }
+      const btn = document.getElementById('testGapsSendBtn');
+      btn.disabled = true;
+      btn.style.opacity = '0.35';
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (!session) { showToast('Not signed in.'); return; }
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/notify-coverage-gaps`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+            'x-test-email': email,
+          },
+        });
+        if (res.ok) {
+          const body = await res.json();
+          showToast(body.gaps ? `Test check sent — ${body.gaps} gap(s) found.` : 'Test check sent — no gaps found.', 'success');
         } else {
           showToast(`Send failed (${res.status}) — please try again.`);
         }

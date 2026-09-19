@@ -370,6 +370,9 @@ verify_jwt = false
 [functions.notify-assignment-changes]
 verify_jwt = false
 
+[functions.notify-coverage-gaps]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
