@@ -2084,11 +2084,12 @@
           </div>
 
           <div class="email-recipients-section admin-only" id="testEmailSection">
-            <div class="rates-section-title" id="testEmailToggle" style="cursor:pointer;user-select:none">Send Test Email ›</div>
+            <div class="rates-section-title" id="testEmailToggle" style="cursor:pointer;user-select:none">Send Test Weekly Email ›</div>
             <div id="testEmailBody" style="display:none">
               <label class="ci-label" style="display:block">Send to
                 <input type="email" id="testEmailInput" class="ci-input" style="width:100%" autocomplete="off">
               </label>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Shows what the automated weekly schedule email would currently send, delivered to this one address instead — doesn't count as a real send.</div>
               <button class="data-btn" id="testEmailSendBtn" style="margin-top:8px">&#x2709; Send test email</button>
             </div>
           </div>
@@ -4796,7 +4797,7 @@
       const body = document.getElementById('testEmailBody');
       const open = body.style.display !== 'none';
       body.style.display = open ? 'none' : '';
-      document.getElementById('testEmailToggle').textContent = open ? 'Send Test Email ›' : 'Send Test Email ↓';
+      document.getElementById('testEmailToggle').textContent = open ? 'Send Test Weekly Email ›' : 'Send Test Weekly Email ↓';
     });
 
     document.getElementById('testEmailSendBtn').addEventListener('click', async () => {
