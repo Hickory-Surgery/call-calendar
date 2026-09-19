@@ -175,17 +175,25 @@ Deno.serve(async (req) => {
     }
 
     const cov = covByDate[covIso]
+    const bariId = cov?.bari_id ?? null
+    const bariName = bariId ? staffById[bariId] : null
+
     if (isDoubleCallDay(getCell(dataIso, callPerson), dow)) {
       const backupId = cov?.day_call_id ?? null
       const backupName = backupId ? staffById[backupId] : null
       if (!backupName) {
         gaps.push({ date: day, issue: 'Backup', detail: 'No backup assigned for this double-call day' })
       } else if (backupName === callPerson) {
-        gaps.push({ date: day, issue: 'Backup', detail: `${callPerson} would be backing up themselves` })
+        // A distinct bari-backup person covering that day rescues this — they're already
+        // effectively available as backup, so it's not a real gap.
+        const bariRescue = !!bariName && bariName !== callPerson
+        if (!bariRescue) {
+          gaps.push({ date: day, issue: 'Backup', detail: `${callPerson} would be backing up themselves` })
+        }
       }
     }
 
-    if (!(cov?.bari_id ?? null)) {
+    if (!bariName) {
       gaps.push({ date: day, issue: 'Bari', detail: 'No bariatric coverage assigned for this day' })
     }
   }
