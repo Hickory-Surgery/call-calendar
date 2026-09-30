@@ -1296,6 +1296,10 @@
       background: #ECEFF1;
     }
 
+    /* Settings Save button with edits not yet saved */
+    .data-btn.unsaved { background: #E65100; border-color: #E65100; color: #fff; }
+    .data-btn.unsaved:hover { background: #BF4300; }
+
     .data-btn.danger {
       color: #B71C1C;
       border-color: #FFCDD2;
@@ -2057,10 +2061,11 @@
             <div id="recipientsBody" style="display:none">
               <div class="recipient-list" id="recipientList"></div>
               <div class="recipient-add-row">
-                <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off">
+                <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off" list="recipientSuggestions">
+                <datalist id="recipientSuggestions"></datalist>
                 <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
               </div>
-              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated weekly schedule email.</div>
+              <div style="font-size:0.72rem;color:#90A4AE;margin-top:6px">Recipients of the automated weekly schedule email. Pick a suggested user or staff address, or type any other address.</div>
               <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-top:10px">
                 <label class="ci-label" style="flex:1;min-width:120px">Send day
                   <select id="ci-email-day" class="ci-input">
@@ -4628,6 +4633,7 @@
           document.getElementById('rateFryeWe').value = rates.frye_weekend;
           document.getElementById('rateCmvcWd').value = rates.cmvc_weekday;
           document.getElementById('rateCmvcWe').value = rates.cmvc_weekend;
+          markSaved('rates');
         });
         document.getElementById('testEmailInput').value = currentUser?.email ?? '';
         document.getElementById('testNotifyInput').value = currentUser?.email ?? '';
@@ -4929,6 +4935,7 @@
         { effective_date, frye_weekday, frye_weekend, cmvc_weekday, cmvc_weekend }
       );
       if (error) { showToast('Save rates failed — please try again.'); return; }
+      markSaved('rates');
       showToast('Rates saved.', 'success');
     });
 
@@ -4952,14 +4959,17 @@
       document.getElementById('ci-office-manager').value    = data.office_manager         ?? '';
       document.getElementById('ci-scheduling-coord').value  = data.scheduling_coordinator ?? '';
       document.getElementById('ci-logo-url').value          = data.logo_url               ?? '';
-      officeContactId = data.office_contact_user_id ?? '';
+      officeContactId = savedOfficeContactId = data.office_contact_user_id ?? '';
       renderOfficeContactSelect();
+      tagOfficeContact();
       renderLogoPreview(data.logo_url);
       const dayEl  = document.getElementById('ci-email-day');
       const timeEl = document.getElementById('ci-email-time');
       dayEl.value  = data.email_day  != null ? String(data.email_day) : '';
       timeEl.value = data.email_time ? data.email_time.slice(0, 5) : '';
       renderScheduleHint();
+      markSaved('practice');
+      markSaved('schedule');
     }
 
     // Weekly email To/Reply-To and bounce alerts go to this account. Options come from
@@ -5049,6 +5059,8 @@
       logoInput.blur(); // values are captured above; now collapse the URL box if it was open
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
+      markSaved('practice');
+      if (profileRows.length) { savedOfficeContactId = officeContactId; tagOfficeContact(); }
       showToast('Practice info saved.', 'success');
     });
 
@@ -5062,6 +5074,7 @@
       };
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
+      markSaved('schedule');
       showToast('Schedule saved.', 'success');
     });
 
@@ -5069,13 +5082,66 @@
       const list = document.getElementById('recipientList');
       const { data, error } = await sb.from('email_recipients').select('id, email, label').order('created_at');
       if (error) { list.innerHTML = '<span style="font-size:0.78rem;color:#E53935">Failed to load.</span>'; return; }
-      if (!data.length) { list.innerHTML = '<span style="font-size:0.78rem;color:#90A4AE">No recipients yet.</span>'; return; }
-      list.innerHTML = data.map(r => `
+      if (!data.length) {
+        list.innerHTML = '<span style="font-size:0.78rem;color:#90A4AE">No recipients yet.</span>';
+      } else {
+        list.innerHTML = data.map(r => `
         <div class="recipient-row" data-id="${esc(r.id)}">
           <span class="recipient-email">${esc(r.email)}</span>
           ${r.label ? `<span class="recipient-label">${esc(r.label)}</span>` : ''}
           <button class="recipient-del" title="Remove">✕</button>
         </div>`).join('');
+      }
+      tagOfficeContact();
+      loadSuggestionPool();
+    }
+
+    // ── Recipient suggestions + office-contact tag ─────────────────────────
+    // Suggestions: every user account, plus active staff (their linked account, else their
+    // fallback email), minus anything already on the list. Schedulers can read profiles via
+    // the "schedulers can read profiles" policy; if that read fails we just get fewer suggestions.
+    let recipientSuggestionPool = [];   // [{ email, label }], lowercased + sorted
+    let recipientProfiles = [];         // [{ id, email, role }]
+    let savedOfficeContactId = '';      // the persisted contact (not the unsaved dropdown value)
+
+    async function loadSuggestionPool() {
+      const { data: profs } = await sb.from('profiles').select('id, email, role');
+      recipientProfiles = profs ?? [];
+      const pool = new Map();
+      for (const p of recipientProfiles) if (p.email) pool.set(p.email.toLowerCase(), `User (${p.role})`);
+      const profById = Object.fromEntries(recipientProfiles.map(p => [p.id, p]));
+      for (const s of staffRows) {   // fetchStaff loads active staff only
+        const em = (s.user_id ? profById[s.user_id]?.email : null) ?? s.email;
+        if (em) pool.set(em.toLowerCase(), `Staff: ${s.short_name}`);
+      }
+      recipientSuggestionPool = [...pool].map(([email, label]) => ({ email, label }))
+        .sort((a, b) => a.email.localeCompare(b.email));
+      renderRecipientSuggestions();
+      tagOfficeContact();
+    }
+
+    function renderRecipientSuggestions() {
+      const listed = new Set([...document.querySelectorAll('#recipientList .recipient-email')]
+        .map(el => el.textContent.trim().toLowerCase()));
+      document.getElementById('recipientSuggestions').innerHTML = recipientSuggestionPool
+        .filter(p => !listed.has(p.email))
+        .map(p => `<option value="${esc(p.email)}" label="${esc(p.label)}"></option>`).join('');
+    }
+
+    // weekly-email sends the office contact as the To and drops them from bcc, so being on this
+    // list never produces a duplicate — the tag just explains why they appear here.
+    function tagOfficeContact() {
+      const contactEmail = recipientProfiles.find(p => p.id === savedOfficeContactId)?.email?.toLowerCase();
+      document.querySelectorAll('#recipientList .recipient-row').forEach(row => {
+        row.querySelector('.recipient-tag')?.remove();
+        if (contactEmail && row.querySelector('.recipient-email').textContent.trim().toLowerCase() === contactEmail) {
+          const tag = document.createElement('span');
+          tag.className = 'recipient-label recipient-tag';
+          tag.textContent = 'office contact';
+          tag.title = 'Receives the weekly email as the To address, so is not also sent a second copy.';
+          row.querySelector('.recipient-del').before(tag);
+        }
+      });
     }
 
     document.getElementById('recipientList').addEventListener('click', async e => {
@@ -5086,6 +5152,7 @@
       const { error } = await sb.from('email_recipients').delete().eq('id', id);
       if (error) { showToast('Remove failed — please try again.'); return; }
       row.remove();
+      renderRecipientSuggestions();
       if (!document.querySelector('.recipient-row')) {
         document.getElementById('recipientList').innerHTML = '<span style="font-size:0.78rem;color:#90A4AE">No recipients yet.</span>';
       }
@@ -5094,7 +5161,8 @@
     document.getElementById('recipientAddBtn').addEventListener('click', async () => {
       const input = document.getElementById('recipientEmailInput');
       const email = input.value.trim().toLowerCase();
-      if (!email || !email.includes('@')) { showToast('Enter a valid email address.'); return; }
+      // Catches missing @ or domain, stray spaces, and pasted lists; can't catch a well-formed wrong address.
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) { showToast("That doesn't look like a valid email address (name@example.com)."); return; }
       const { error } = await sb.from('email_recipients').insert({ email });
       if (error) {
         showToast(error.code === '23505' ? 'That address is already in the list.' : 'Add failed — please try again.');
@@ -5108,7 +5176,39 @@
       if (e.key === 'Enter') document.getElementById('recipientAddBtn').click();
     });
 
+    // ── Unsaved-change tracking for the Save buttons in Settings ───────────
+    // Each section snapshots its fields when loaded or saved; its button turns amber while the
+    // current values differ. Staff is excluded — it auto-saves on close.
+    const fieldVal = id => document.getElementById(id).value;
+    const unsavedSections = {
+      practice: { label: 'Practice info', btn: 'ciSaveBtn', saved: null, read: () => JSON.stringify([
+        ['ci-name', 'ci-address', 'ci-phone', 'ci-fax', 'ci-office-manager', 'ci-scheduling-coord', 'ci-logo-url']
+          .map(id => fieldVal(id).trim()),
+        officeContactId,
+      ]) },
+      schedule: { label: 'Schedule', btn: 'ciScheduleSaveBtn', saved: null,
+        read: () => JSON.stringify([fieldVal('ci-email-day'), fieldVal('ci-email-time')]) },
+      rates: { label: 'Rates', btn: 'saveRatesBtn', saved: null, read: () => JSON.stringify(
+        ['rateFryeWd', 'rateFryeWe', 'rateCmvcWd', 'rateCmvcWe'].map(id => parseFloat(fieldVal(id)) || 0)) },
+    };
+    const isUnsaved = s => s.saved !== null && s.read() !== s.saved;
+    function updateUnsaved() {
+      for (const s of Object.values(unsavedSections)) {
+        document.getElementById(s.btn).classList.toggle('unsaved', isUnsaved(s));
+      }
+    }
+    function markSaved(key) { unsavedSections[key].saved = unsavedSections[key].read(); updateUnsaved(); }
+    function clearUnsaved() { for (const s of Object.values(unsavedSections)) s.saved = null; updateUnsaved(); }
+    // For user-initiated exits only (Done, backdrop, Totals) — true means safe to proceed.
+    function confirmDiscardUnsaved() {
+      const dirty = Object.values(unsavedSections).filter(isUnsaved).map(s => s.label);
+      return !dirty.length || confirm(`You have unsaved changes to ${dirty.join(' and ')}. Discard them?`);
+    }
+    document.getElementById('settingsOverlay').addEventListener('input', updateUnsaved);
+    document.getElementById('settingsOverlay').addEventListener('change', updateUnsaved);
+
     function closeSettings() {
+      clearUnsaved();
       if (currentRole === 'admin' && !viewAsRole) {
         syncStaffFromDOM();
         staff = staff.filter(Boolean);
@@ -5395,7 +5495,7 @@
       }, 40);
     });
 
-    document.getElementById('settingsDone').addEventListener('click', closeSettings);
+    document.getElementById('settingsDone').addEventListener('click', () => { if (confirmDiscardUnsaved()) closeSettings(); });
     document.getElementById('settingsBtn').addEventListener('click', openSettings);
 
     // ─────────────────────────────────────────────
@@ -5414,6 +5514,7 @@
     }
 
     async function openTotals() {
+      if (!confirmDiscardUnsaved()) return;
       closeSettings();
       const y = viewYear, m = viewMonth;
       const days = new Date(y, m + 1, 0).getDate();
@@ -5551,7 +5652,7 @@
       if (e.target === document.getElementById('totalsOverlay')) closeTotals();
     });
     document.getElementById('settingsOverlay').addEventListener('click', e => {
-      if (e.target === document.getElementById('settingsOverlay')) closeSettings();
+      if (e.target === document.getElementById('settingsOverlay') && confirmDiscardUnsaved()) closeSettings();
     });
 
     // ─────────────────────────────────────────────
