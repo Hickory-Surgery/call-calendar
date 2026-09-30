@@ -40,9 +40,17 @@ type NotifyEvent = {
   person: string
   date: string
   role: 'On call' | 'Backup' | 'Bari' | 'Day call (exception)'
-  detail: string
+  from: string
+  to: string
+  note?: string
   changedBy: string | null
   changedAt: string | null
+}
+
+const UNCOVERED = { to: 'Nobody', note: 'Needs coverage!' }
+
+function levelLabel(v: string): string {
+  return v === 'single' ? 'Single' : v === 'double' ? 'Double' : v === 'none' ? 'None' : v
 }
 
 Deno.serve(async (req) => {
@@ -208,18 +216,18 @@ Deno.serve(async (req) => {
       const gain = gains[partnerIdx]
       onCallEvents.push({
         person: loss.person, date: loss.date, role: 'On call',
-        detail: `Reassigned to ${gain.person}`,
+        from: loss.person, to: gain.person,
         changedBy: loss.changedBy, changedAt: loss.changedAt,
       })
       onCallEvents.push({
         person: gain.person, date: gain.date, role: 'On call',
-        detail: `Now on call (was ${loss.person})`,
+        from: loss.person, to: gain.person,
         changedBy: gain.changedBy, changedAt: gain.changedAt,
       })
     } else {
       onCallEvents.push({
         person: loss.person, date: loss.date, role: 'On call',
-        detail: `Removed — no replacement assigned, this day is now uncovered`,
+        from: loss.person, ...UNCOVERED,
         changedBy: loss.changedBy, changedAt: loss.changedAt,
       })
     }
@@ -227,7 +235,7 @@ Deno.serve(async (req) => {
   for (const vc of ownChanges) {
     onCallEvents.push({
       person: vc.person, date: vc.date, role: 'On call',
-      detail: `Changed from "${vc.from}" to "${vc.to}"`,
+      from: levelLabel(vc.from), to: levelLabel(vc.to),
       changedBy: vc.changedBy, changedAt: vc.changedAt,
     })
   }
@@ -295,22 +303,24 @@ Deno.serve(async (req) => {
     const prevName = prevId ? staffById[prevId]?.short_name ?? null : null
     const newName = newId ? staffById[newId]?.short_name ?? null : null
     const newRole = incomingLabel ?? role
-    const ctx = incomingContext ? ` — ${incomingContext}` : ''
     if (!prevId && newId) return // blank -> value: silent, initial entry
     if (prevId && !newId) {
       if (!prevName) return
       coverageEvents.push({
         person: prevName, date, role,
-        detail: `Removed — no replacement assigned, this day is now uncovered`,
+        from: prevName, ...UNCOVERED,
         changedBy, changedAt,
       })
     } else if (prevId && newId && prevId !== newId) {
+      const fromLabel = prevName ?? 'Someone else'
+      const toLabel = newName ?? 'Someone else'
       if (prevName) coverageEvents.push({
-        person: prevName, date, role, detail: `Reassigned to ${newName ?? 'someone else'}`,
+        person: prevName, date, role, from: fromLabel, to: toLabel,
         changedBy, changedAt,
       })
       if (newName) coverageEvents.push({
-        person: newName, date, role: newRole, detail: `Now assigned (was ${prevName ?? 'someone else'})${ctx}`,
+        person: newName, date, role: newRole, from: fromLabel, to: toLabel,
+        note: incomingContext,
         changedBy, changedAt,
       })
     }
@@ -371,7 +381,7 @@ Deno.serve(async (req) => {
   // recipient (e.g. am and pm both "Now on call (was MC)") — collapse those into one line.
   const seenEventKeys = new Set<string>()
   const allEvents = [...onCallEvents, ...coverageEvents].filter(ev => {
-    const key = `${ev.person}|${ev.date}|${ev.role}|${ev.detail}|${ev.changedBy ?? ''}`
+    const key = `${ev.person}|${ev.date}|${ev.role}|${ev.from}|${ev.to}|${ev.changedBy ?? ''}`
     if (seenEventKeys.has(key)) return false
     seenEventKeys.add(key)
     return true
@@ -392,10 +402,14 @@ Deno.serve(async (req) => {
     }
     events.sort((a, b) => a.date.localeCompare(b.date))
 
+    const who = (v: string) => v === person ? 'You' : v
+    const whoHtml = (v: string) => v === person ? `<strong>You</strong>` : escapeHtml(v)
+
     const rowsHtml = events.map(ev => `<tr>
       <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(fmtDay(ev.date))}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(ev.role)}</td>
-      <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(ev.detail)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${whoHtml(ev.from)}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${whoHtml(ev.to)}${ev.note ? `<br><span style="color:#607D8B;font-size:0.82rem">${escapeHtml(ev.note)}</span>` : ''}</td>
       <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1;color:#607D8B;font-size:0.82rem">${escapeHtml(labelForChanger(ev.changedBy))}<br>${escapeHtml(fmtWhen(ev.changedAt))}</td>
     </tr>`).join('\n')
 
@@ -414,7 +428,8 @@ Deno.serve(async (req) => {
     <thead><tr style="background:#F5F7FA">
       <th style="padding:6px 10px;text-align:left">Date</th>
       <th style="padding:6px 10px;text-align:left">Role</th>
-      <th style="padding:6px 10px;text-align:left">Change</th>
+      <th style="padding:6px 10px;text-align:left">Was</th>
+      <th style="padding:6px 10px;text-align:left">Now</th>
       <th style="padding:6px 10px;text-align:left">Made by</th>
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
@@ -427,7 +442,7 @@ Deno.serve(async (req) => {
     const text = [
       `Call schedule changes for ${person}`,
       '',
-      ...events.map(ev => `${fmtDay(ev.date)} — ${ev.role}: ${ev.detail} (by ${labelForChanger(ev.changedBy)} at ${fmtWhen(ev.changedAt)})`),
+      ...events.map(ev => `${fmtDay(ev.date)} — ${ev.role}: ${who(ev.from)} → ${who(ev.to)}${ev.note ? ` (${ev.note})` : ''} (by ${labelForChanger(ev.changedBy)} at ${fmtWhen(ev.changedAt)})`),
     ].join('\n')
 
     const res = await fetch('https://api.resend.com/emails', {
