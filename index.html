@@ -2150,8 +2150,10 @@
           <div class="ci-form">
             <label class="ci-label">Practice name<input type="text" id="ci-name" class="ci-input" placeholder="e.g. Hickory Surgery Associates"></label>
             <label class="ci-label">Address<textarea id="ci-address" class="ci-input ci-textarea" rows="2" placeholder="Street, City, State ZIP"></textarea></label>
-            <label class="ci-label">Phone<input type="tel" id="ci-phone" class="ci-input" placeholder="(555) 555-5555"></label>
-            <label class="ci-label">Fax<input type="tel" id="ci-fax" class="ci-input" placeholder="(555) 555-5555"></label>
+            <div style="display:flex;gap:8px">
+              <label class="ci-label" style="flex:1;min-width:0">Phone<input type="tel" id="ci-phone" class="ci-input" placeholder="(555) 555-5555"></label>
+              <label class="ci-label" style="flex:1;min-width:0">Fax<input type="tel" id="ci-fax" class="ci-input" placeholder="(555) 555-5555"></label>
+            </div>
             <label class="ci-label">Office Manager<input type="text" id="ci-office-manager" class="ci-input" placeholder="Name"></label>
             <label class="ci-label">Scheduling Coordinator<input type="text" id="ci-scheduling-coord" class="ci-input" placeholder="Name"></label>
             <label class="ci-label">Office contact email<select id="ci-office-contact" class="ci-input"></select></label>
