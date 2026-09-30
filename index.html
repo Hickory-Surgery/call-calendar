@@ -2769,7 +2769,7 @@
     function renderAuditDetail(row) {
       const FIELDS = ['am', 'pm', 'oncall_am', 'oncall_pm', 'exception'];
       const LABELS = { am: 'AM', pm: 'PM', oncall_am: 'Oncall AM', oncall_pm: 'Oncall PM', exception: 'Exception' };
-      const changedAt = new Date(row.changed_at).toLocaleString();
+      const changedAt = new Date(row.changed_at).toLocaleString('en-US', { timeZone: 'America/New_York' });
       const byEmail = row.changed_by
         ? (profileRows.find(p => p.id === row.changed_by)?.email ?? row.changed_by.slice(0, 8) + '…')
         : 'System';
@@ -2832,8 +2832,9 @@
         const person = affRow?.person_id ? (staffById[affRow.person_id]?.short_name ?? '?') : '—';
         const opClass = row.operation === 'INSERT' ? 'op-insert' : row.operation === 'DELETE' ? 'op-delete' : 'op-update';
         const opLabel = row.operation === 'INSERT' ? 'Add' : row.operation === 'DELETE' ? 'Del' : 'Edit';
-        const _ts = new Date(row.changed_at);
-        const timeStr = `${String(_ts.getMonth()+1).padStart(2,'0')}/${String(_ts.getDate()).padStart(2,'0')}/${String(_ts.getFullYear()).slice(2)} ${_ts.toLocaleString([],{hour:'numeric',minute:'2-digit'})}`;
+        const timeStr = new Date(row.changed_at).toLocaleString('en-US', {
+          timeZone: 'America/New_York', month: '2-digit', day: '2-digit', year: '2-digit', hour: 'numeric', minute: '2-digit',
+        }).replace(',', '');
         const byEmail = row.changed_by
           ? (profileRows.find(p => p.id === row.changed_by)?.email ?? '…')
           : 'System';
