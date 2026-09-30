@@ -373,6 +373,10 @@ verify_jwt = false
 [functions.notify-coverage-gaps]
 verify_jwt = false
 
+# Called by Resend's servers, which have no Supabase JWT; authenticated by Svix signature instead.
+[functions.resend-webhook]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
