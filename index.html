@@ -5030,6 +5030,9 @@
     document.getElementById('ci-email-day').addEventListener('change', renderScheduleHint);
     document.getElementById('ci-email-time').addEventListener('input', renderScheduleHint);
 
+    // Pressing Save must not blur the URL box: it collapses on blur, which shifts Save out from
+    // under the pointer mid-click and the click never fires. The handler below blurs it instead.
+    document.getElementById('ciSaveBtn').addEventListener('mousedown', e => e.preventDefault());
     document.getElementById('ciSaveBtn').addEventListener('click', async () => {
       const payload = {
         name:                    document.getElementById('ci-name').value.trim() || null,
@@ -5043,6 +5046,7 @@
       };
       // Only admins load the account list; don't overwrite the saved contact with blank otherwise.
       if (profileRows.length) payload.office_contact_user_id = officeContactId || null;
+      logoInput.blur(); // values are captured above; now collapse the URL box if it was open
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
       showToast('Practice info saved.', 'success');
