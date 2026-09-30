@@ -2061,7 +2061,8 @@
             <div id="recipientsBody" style="display:none">
               <div class="recipient-list" id="recipientList"></div>
               <div class="recipient-add-row">
-                <input type="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off" list="recipientSuggestions">
+                <!-- type=text (not email) so Safari/Chrome don't offer the user's own contact/autofill emails; inputmode keeps the email keyboard on phones -->
+                <input type="text" inputmode="email" id="recipientEmailInput" class="recipient-input" placeholder="email@example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true" list="recipientSuggestions">
                 <datalist id="recipientSuggestions"></datalist>
                 <button class="data-btn" id="recipientAddBtn" style="margin-top:0">+ Add</button>
               </div>
