@@ -140,6 +140,7 @@ Deno.serve(async (req) => {
   const staffById: Record<string, typeof staffRows[number]> = Object.fromEntries(staffRows.map(r => [r.id, r]))
 
   function displayName(shortName: string): string {
+    // TODO: `deno check` fails here (staffRows possibly undefined inside the closure) — pre-existing, runtime is fine
     const row = staffRows.find(r => r.short_name === shortName)
     return row?.display_name || shortName || '—'
   }
@@ -308,10 +309,19 @@ Deno.serve(async (req) => {
   const testEmail = req.headers.get('x-test-email')
 
   let recipientEmails: string[]
+  // The office contact (if set) is the visible To and the Reply-To, so replies reach a
+  // live inbox; with none set we fall back to the old noreply@ To, which can't receive mail.
+  let contactEmail: string | null = null
   if (testEmail) {
     recipientEmails = [testEmail]
     console.log('Test mode — sending only to:', testEmail)
   } else {
+    const { data: ci } = await sb.from('company_info').select('office_contact_user_id').eq('id', 1).maybeSingle()
+    if (ci?.office_contact_user_id) {
+      const { data: prof } = await sb.from('profiles').select('email').eq('id', ci.office_contact_user_id).maybeSingle()
+      contactEmail = prof?.email ?? null
+    }
+
     const { data: recipientRows } = await sb
       .from('email_recipients')
       .select('email')
@@ -322,8 +332,10 @@ Deno.serve(async (req) => {
       return new Response('No recipients', { status: 200, headers: CORS })
     }
 
+    // Drop the contact from bcc so they don't get a second copy of their own To.
     recipientEmails = recipientRows.map(r => r.email)
-    console.log('Sending to:', recipientEmails)
+      .filter(e => !contactEmail || e.toLowerCase() !== contactEmail.toLowerCase())
+    console.log('Sending to:', recipientEmails, 'contact:', contactEmail)
   }
 
   // ── Send via Resend ───────────────────────────────────────────────────────
@@ -335,8 +347,10 @@ Deno.serve(async (req) => {
     },
     body: JSON.stringify({
       from: 'Call Calendar <noreply@ssrounds.com>',
-      to: 'noreply@ssrounds.com',
-      bcc: recipientEmails,
+      // Test mode sends only to the test address (never the contact, never noreply@).
+      to: testEmail ?? contactEmail ?? 'noreply@ssrounds.com',
+      ...(contactEmail ? { reply_to: contactEmail } : {}),
+      ...(!testEmail && recipientEmails.length ? { bcc: recipientEmails } : {}),
       subject,
       html,
       text,

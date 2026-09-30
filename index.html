@@ -2154,6 +2154,8 @@
             <label class="ci-label">Fax<input type="tel" id="ci-fax" class="ci-input" placeholder="(555) 555-5555"></label>
             <label class="ci-label">Office Manager<input type="text" id="ci-office-manager" class="ci-input" placeholder="Name"></label>
             <label class="ci-label">Scheduling Coordinator<input type="text" id="ci-scheduling-coord" class="ci-input" placeholder="Name"></label>
+            <label class="ci-label">Office contact email<select id="ci-office-contact" class="ci-input"></select></label>
+            <div id="ci-office-contact-hint" style="font-size:0.75rem;color:#607D8B;margin:-4px 0 6px"></div>
             <label class="ci-label">Logo URL<input type="url" id="ci-logo-url" class="ci-input" placeholder="https://…"></label>
             <div id="ci-logo-preview" style="margin-top:4px;min-height:0"></div>
             <button class="data-btn" id="ciSaveBtn">&#x2713; Save practice info</button>
@@ -4613,7 +4615,7 @@
       if (admin || scheduler) loadCompanyInfo();
       if (admin) {
         fetchDeactivatedStaff().then(renderDeactivatedList);
-        fetchProfiles().then(() => { renderUsersList(); renderStaffList(); });
+        fetchProfiles().then(() => { renderUsersList(); renderStaffList(); renderOfficeContactSelect(); });
         fetchAuditLog();
         fetchCurrentRates().then(rates => {
           document.getElementById('rateFryeWd').value = rates.frye_weekday;
@@ -4944,6 +4946,8 @@
       document.getElementById('ci-office-manager').value    = data.office_manager         ?? '';
       document.getElementById('ci-scheduling-coord').value  = data.scheduling_coordinator ?? '';
       document.getElementById('ci-logo-url').value          = data.logo_url               ?? '';
+      officeContactId = data.office_contact_user_id ?? '';
+      renderOfficeContactSelect();
       renderLogoPreview(data.logo_url);
       const dayEl  = document.getElementById('ci-email-day');
       const timeEl = document.getElementById('ci-email-time');
@@ -4951,6 +4955,24 @@
       timeEl.value = data.email_time ? data.email_time.slice(0, 5) : '';
       renderScheduleHint();
     }
+
+    // Weekly email To/Reply-To and bounce alerts go to this account. Options come from
+    // profileRows (admin-only fetch), so this is re-run once profiles finish loading.
+    let officeContactId = '';
+    function renderOfficeContactSelect() {
+      const sel = document.getElementById('ci-office-contact');
+      sel.innerHTML = '<option value="">— None —</option>' + profileRows.map(p =>
+        `<option value="${p.id}">${esc(p.email)}</option>`
+      ).join('');
+      sel.value = officeContactId;
+      const row = profileRows.find(p => p.id === officeContactId);
+      document.getElementById('ci-office-contact-hint').textContent =
+        row && row.role !== 'admin' ? 'Not an admin — bounce alerts will also go to admins.' : '';
+    }
+    document.getElementById('ci-office-contact').addEventListener('change', e => {
+      officeContactId = e.target.value;
+      renderOfficeContactSelect();
+    });
 
     function renderLogoPreview(url) {
       const el = document.getElementById('ci-logo-preview');
@@ -4987,6 +5009,8 @@
         logo_url:                document.getElementById('ci-logo-url').value.trim() || null,
         updated_at:              new Date().toISOString(),
       };
+      // Only admins load the account list; don't overwrite the saved contact with blank otherwise.
+      if (profileRows.length) payload.office_contact_user_id = officeContactId || null;
       const { error } = await sb.from('company_info').update(payload).eq('id', 1);
       if (error) { showToast('Save failed — please try again.'); return; }
       showToast('Practice info saved.', 'success');
