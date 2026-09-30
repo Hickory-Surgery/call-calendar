@@ -1502,6 +1502,7 @@
 
     .staff-item-readonly {
       display: flex;
+      flex-direction: row; /* .staff-item (also on these rows) sets column */
       align-items: center;
       gap: 8px;
       padding: 6px 2px;
@@ -1783,7 +1784,7 @@
       margin-bottom: 20px;
     }
 
-    .add-user-row input[type="email"] {
+    .add-user-row input[type="text"] {
       flex: 1;
       padding: 8px 8px;
       border: 1.5px solid #CFD8DC;
@@ -1793,7 +1794,7 @@
       min-width: 0;
     }
 
-    .add-user-row input[type="email"]:focus {
+    .add-user-row input[type="text"]:focus {
       outline: none;
       border-color: #37474F;
     }
@@ -2043,7 +2044,7 @@
         <div class="tab-panel" id="tab-users">
           <div class="users-list" id="usersList"></div>
           <div class="add-user-row">
-            <input type="email" id="newUserEmail" placeholder="Gmail address">
+            <input type="text" inputmode="email" id="newUserEmail" placeholder="Gmail address" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true">
             <select id="newUserRole">
               <option value="viewer">Viewer</option>
               <option value="scheduler">Scheduler</option>
@@ -5269,7 +5270,7 @@
                 <option value="__email__"${useEmailFallback ? ' selected' : ''}>Enter email…</option>
                 ${accountOptions}
               </select>
-              <input type="email" class="staff-email-fallback" value="${esc(emailVal)}" placeholder="email@example.com" style="display:${useEmailFallback ? '' : 'none'}">
+              <input type="text" inputmode="email" class="staff-email-fallback" value="${esc(emailVal)}" placeholder="email@example.com" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-1p-ignore data-lpignore="true" style="display:${useEmailFallback ? '' : 'none'}">
             </label>
           </div>
         </div>`;
