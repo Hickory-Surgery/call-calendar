@@ -32,7 +32,7 @@ function fmtDay(dateStr: string): string {
 
 function fmtWhen(iso: string | null): string {
   if (!iso) return 'unknown time'
-  return new Date(iso).toLocaleString('en-US', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC'
+  return new Date(iso).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
 }
 
 type Cell = { am: string; pm: string; oncall_am: string; oncall_pm: string; exception: boolean }
