@@ -2158,8 +2158,12 @@
             <label class="ci-label">Scheduling Coordinator<input type="text" id="ci-scheduling-coord" class="ci-input" placeholder="Name"></label>
             <label class="ci-label">Office contact email<select id="ci-office-contact" class="ci-input"></select></label>
             <div id="ci-office-contact-hint" style="font-size:0.75rem;color:#607D8B;margin:-4px 0 6px"></div>
-            <label class="ci-label">Logo URL<input type="url" id="ci-logo-url" class="ci-input" placeholder="https://…"></label>
-            <div id="ci-logo-preview" style="margin-top:4px;min-height:0"></div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="ci-label">Logo</span>
+              <button type="button" id="ci-logo-link" style="background:none;border:1px solid #CFD8DC;border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.95rem" title="Set logo URL">&#128279;</button>
+              <div id="ci-logo-preview"></div>
+            </div>
+            <input type="url" id="ci-logo-url" class="ci-input" placeholder="https://…" style="display:none">
             <button class="data-btn" id="ciSaveBtn">&#x2713; Save practice info</button>
           </div>
         </div>
@@ -4978,10 +4982,36 @@
 
     function renderLogoPreview(url) {
       const el = document.getElementById('ci-logo-preview');
-      el.innerHTML = url ? `<img src="${esc(url)}" alt="Logo preview" style="max-height:48px;max-width:160px;object-fit:contain;border-radius:3px;border:1px solid #ECEFF1">` : '';
+      el.textContent = '';
+      if (url) {
+        const img = document.createElement('img');
+        img.alt = 'Logo preview';
+        img.style.cssText = 'max-height:48px;max-width:160px;object-fit:contain;border-radius:3px;border:1px solid #ECEFF1';
+        img.onerror = () => {
+          if (img.parentNode !== el) return; // a newer render already replaced this one
+          el.textContent = '';
+          const msg = document.createElement('span');
+          msg.style.cssText = 'font-size:0.75rem;color:#E53935';
+          msg.textContent = "Couldn't load image";
+          el.appendChild(msg);
+        };
+        img.src = url;
+        el.appendChild(img);
+      }
+      const link = document.getElementById('ci-logo-link');
+      link.title = url || 'Set logo URL';
+      link.style.opacity = url ? '1' : '0.45';
     }
 
-    document.getElementById('ci-logo-url').addEventListener('input', e => renderLogoPreview(e.target.value.trim()));
+    // The URL box stays hidden (it still holds the value for load/save); the link icon reveals it.
+    const logoInput = document.getElementById('ci-logo-url');
+    document.getElementById('ci-logo-link').addEventListener('click', () => {
+      logoInput.style.display = '';
+      logoInput.focus();
+    });
+    logoInput.addEventListener('blur', () => { logoInput.style.display = 'none'; });
+    logoInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); logoInput.blur(); } });
+    logoInput.addEventListener('input', e => renderLogoPreview(e.target.value.trim()));
 
     const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     function renderScheduleHint() {
