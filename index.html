@@ -5257,7 +5257,7 @@
               Bari
             </label>
             ${subBtn}
-            ${(!userIdVal && !emailVal) ? '<span class="pending-badge" title="No login account or email on file — this person won\'t receive assignment-change emails">No email</span>' : ''}
+            <span class="pending-badge staff-no-email" title="No login account or email on file — this person won't receive assignment-change emails" style="display:${(!userIdVal && !emailVal) ? '' : 'none'}">No email</span>
             <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal || emailVal ? '#1565C0' : ''}">&#8943;</span>
             <button class="remove-btn" data-idx="${i}" aria-label="Remove">&#x2715;</button>
           </div>
@@ -5296,11 +5296,23 @@
         });
       });
 
+      // The badge mirrors what saveStaffToSupabase would write: an account, or a typed fallback email.
+      function updateNoEmailBadge(item) {
+        const val = item.querySelector('.staff-user-id').value;
+        const hasEmail = val === '__email__'
+          ? !!item.querySelector('.staff-email-fallback').value.trim()
+          : !!val;
+        item.querySelector('.staff-no-email').style.display = hasEmail ? 'none' : '';
+      }
       list.querySelectorAll('.staff-user-id').forEach(sel => {
         sel.addEventListener('change', () => {
           const emailInput = sel.closest('.staff-account-label').querySelector('.staff-email-fallback');
           emailInput.style.display = sel.value === '__email__' ? '' : 'none';
+          updateNoEmailBadge(sel.closest('.staff-item'));
         });
+      });
+      list.querySelectorAll('.staff-email-fallback').forEach(input => {
+        input.addEventListener('input', () => updateNoEmailBadge(input.closest('.staff-item')));
       });
 
       list.querySelectorAll('.remove-btn').forEach(btn => {
