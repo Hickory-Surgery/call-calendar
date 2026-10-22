@@ -397,6 +397,7 @@ Deno.serve(async (req) => {
   for (const [person, events] of byPerson) {
     const toEmail = isTest ? testEmail : emailFor(person)
     if (!toEmail) {
+      console.warn(`notify-assignment-changes: no email on file for ${person}; skipping ${events.length} change(s)`)
       results.push({ person, email: null, sent: false })
       continue
     }
@@ -458,6 +459,9 @@ Deno.serve(async (req) => {
         html, text,
       }),
     })
+    if (!res.ok) {
+      console.error(`notify-assignment-changes: Resend rejected send for ${person} (${res.status}): ${await res.text()}`)
+    }
     results.push({ person, email: toEmail, sent: res.ok })
   }
 

@@ -5265,7 +5265,7 @@
             <label class="staff-date-label">From <input type="date" class="staff-start" value="${startVal}" title="Start date (shown starting this month)"></label>
             <label class="staff-date-label">To <input type="date" class="staff-stop" value="${stopVal}" title="Stop date (hidden the month after)"></label>
             <label class="staff-date-label staff-account-label">Account
-              <select class="staff-user-id" title="Login account to notify when this person's call assignments change">
+              <select class="staff-user-id" data-ready="${profileRows.length ? '1' : ''}" title="Login account to notify when this person's call assignments change">
                 <option value="">— none —</option>
                 <option value="__email__"${useEmailFallback ? ' selected' : ''}>Enter email…</option>
                 ${accountOptions}
@@ -5455,6 +5455,9 @@
         const email = accountVal === '__email__'
           ? (item.querySelector('.staff-email-fallback')?.value.trim() || null)
           : null;
+        // Until profiles have loaded the Account dropdown has no linked-account options, so it
+        // reads as "none" — writing that would silently clear every existing link.
+        const accountReady = item.querySelector('.staff-user-id')?.dataset.ready === '1';
         if (!short) continue;
 
         if (id) {
@@ -5466,8 +5469,7 @@
             sort_order: i,
             start_date,
             stop_date,
-            user_id,
-            email,
+            ...(accountReady ? { user_id, email } : {}),
           }).eq('id', id);
           if (error) { showToast('Staff save failed — please try again.'); return; }
         } else {
