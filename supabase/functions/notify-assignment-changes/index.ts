@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Time window ────────────────────────────────────────────────────────
-  const { data: co } = await sb.from('company_info').select('assignment_notify_last_run').eq('id', 1).maybeSingle()
+  const { data: co } = await sb.from('company_info').select('assignment_notify_last_run, office_contact_user_id').eq('id', 1).maybeSingle()
   const lastRun = co?.assignment_notify_last_run as string | null
   const now = new Date()
   const nowIso = now.toISOString()
@@ -379,8 +379,32 @@ Deno.serve(async (req) => {
   // A weekday's on-call is two independent slots (am/pm) usually moved together by the
   // whole-day drag, so the same swap can produce two events that read identically to the
   // recipient (e.g. am and pm both "Now on call (was MC)") — collapse those into one line.
+  //
+  // Previously-undeliverable events (assignment_notify_pending) are merged in first so they
+  // win the dedupe below — a fresh duplicate of an already-queued event isn't queued twice.
+  const pendingSet = new Set<NotifyEvent>()
+  const pendingIdsByPerson = new Map<string, number[]>()
+  if (!isTest) {
+    const { data: pendingRows } = await sb.from('assignment_notify_pending').select('id, person, event_date, event')
+    const staleIds: number[] = []
+    for (const r of (pendingRows ?? []) as Array<{ id: number; person: string; event_date: string; event: NotifyEvent }>) {
+      // Past events are no longer worth sending; so are ones for since-deactivated staff.
+      if (r.event_date < yesterday || !staffByShortName[r.person]) { staleIds.push(r.id); continue }
+      pendingSet.add(r.event)
+      if (!pendingIdsByPerson.has(r.person)) pendingIdsByPerson.set(r.person, [])
+      pendingIdsByPerson.get(r.person)!.push(r.id)
+    }
+    if (staleIds.length) await sb.from('assignment_notify_pending').delete().in('id', staleIds)
+  }
+
+  async function queueUndelivered(person: string, events: NotifyEvent[]) {
+    const fresh = events.filter(ev => !pendingSet.has(ev))
+    if (isTest || !fresh.length) return
+    await sb.from('assignment_notify_pending').insert(fresh.map(ev => ({ person, event_date: ev.date, event: ev })))
+  }
+
   const seenEventKeys = new Set<string>()
-  const allEvents = [...onCallEvents, ...coverageEvents].filter(ev => {
+  const allEvents = [...pendingSet, ...onCallEvents, ...coverageEvents].filter(ev => {
     const key = `${ev.person}|${ev.date}|${ev.role}|${ev.from}|${ev.to}|${ev.changedBy ?? ''}`
     if (seenEventKeys.has(key)) return false
     seenEventKeys.add(key)
@@ -397,7 +421,8 @@ Deno.serve(async (req) => {
   for (const [person, events] of byPerson) {
     const toEmail = isTest ? testEmail : emailFor(person)
     if (!toEmail) {
-      console.warn(`notify-assignment-changes: no email on file for ${person}; skipping ${events.length} change(s)`)
+      console.warn(`notify-assignment-changes: no email on file for ${person}; queueing ${events.length} change(s)`)
+      await queueUndelivered(person, events)
       results.push({ person, email: null, sent: false })
       continue
     }
@@ -446,23 +471,101 @@ Deno.serve(async (req) => {
       ...events.map(ev => `${fmtDay(ev.date)} — ${ev.role}: ${who(ev.from)} → ${who(ev.to)}${ev.note ? ` (${ev.note})` : ''} (by ${labelForChanger(ev.changedBy)} at ${fmtWhen(ev.changedAt)})`),
     ].join('\n')
 
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: 'Call Calendar <noreply@ssrounds.com>',
-        to: toEmail,
-        subject: `${isTest ? '[TEST] ' : ''}Call schedule change${events.length > 1 ? 's' : ''} affecting you`,
-        html, text,
-      }),
-    })
-    if (!res.ok) {
-      console.error(`notify-assignment-changes: Resend rejected send for ${person} (${res.status}): ${await res.text()}`)
+    // A thrown fetch is treated like a rejection — otherwise the run would abort before
+    // persisting state and re-scan (and re-email) everyone already notified.
+    let res: Response | null = null
+    try {
+      res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: 'Call Calendar <noreply@ssrounds.com>',
+          to: toEmail,
+          subject: `${isTest ? '[TEST] ' : ''}Call schedule change${events.length > 1 ? 's' : ''} affecting you`,
+          html, text,
+        }),
+      })
+      if (!res.ok) {
+        console.error(`notify-assignment-changes: Resend rejected send for ${person} (${res.status}): ${await res.text()}`)
+      }
+    } catch (e) {
+      console.error(`notify-assignment-changes: send failed for ${person}: ${e}`)
     }
-    results.push({ person, email: toEmail, sent: res.ok })
+    const sent = !!res?.ok
+    if (sent) {
+      const ids = pendingIdsByPerson.get(person)
+      if (!isTest && ids?.length) await sb.from('assignment_notify_pending').delete().in('id', ids)
+    } else {
+      await queueUndelivered(person, events)
+    }
+    results.push({ person, email: toEmail, sent })
+  }
+
+  // ── Remind the office contact (or all admins) while anything is undeliverable ──
+  // Throttled per row by last_alerted_at; the queue itself empties on delivery or once the
+  // event dates pass, which also ends the reminders.
+  if (!isTest) {
+    const { data: outstanding } = await sb
+      .from('assignment_notify_pending')
+      .select('id, person, event_date, last_alerted_at')
+    const rows = (outstanding ?? []) as Array<{ id: number; person: string; event_date: string; last_alerted_at: string | null }>
+    const cutoff = now.getTime() - 20 * 3_600_000
+    if (rows.some(r => !r.last_alerted_at || new Date(r.last_alerted_at).getTime() < cutoff)) {
+      const byWho = new Map<string, { count: number; earliest: string }>()
+      for (const r of rows) {
+        const cur = byWho.get(r.person)
+        if (!cur) byWho.set(r.person, { count: 1, earliest: r.event_date })
+        else { cur.count++; if (r.event_date < cur.earliest) cur.earliest = r.event_date }
+      }
+      const noEmail = [...byWho].filter(([p]) => !emailFor(p))
+      const failing = [...byWho].filter(([p]) => !!emailFor(p))
+      const li = ([p, v]: [string, { count: number; earliest: string }]) =>
+        `<li><strong>${escapeHtml(p)}</strong> — ${v.count} change${v.count > 1 ? 's' : ''} waiting (earliest ${escapeHtml(fmtDay(v.earliest))})</li>`
+
+      const officeUserId = co?.office_contact_user_id as string | null | undefined
+      let alertTo: string[] = officeUserId && emailByUserId[officeUserId] ? [emailByUserId[officeUserId]] : []
+      if (!alertTo.length) {
+        const { data: adminProfiles } = await sb.from('profiles').select('email').eq('role', 'admin')
+        alertTo = (adminProfiles ?? []).map(p => p.email).filter(Boolean)
+      }
+
+      if (alertTo.length) {
+        const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
+  <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">Call schedule notifications not delivered</h2>
+  ${noEmail.length ? `<p style="font-size:0.9rem">These people have schedule changes waiting but <strong>no email on file</strong>. Link an account or add an email for them in Settings → Staff; the changes will be sent on the next daily run.</p><ul>${noEmail.map(li).join('')}</ul>` : ''}
+  ${failing.length ? `<p style="font-size:0.9rem">Sending to these people is <strong>failing</strong> (check the notify-assignment-changes logs). It will keep retrying daily.</p><ul>${failing.map(li).join('')}</ul>` : ''}
+  <p style="font-size:0.78rem;color:#90A4AE;margin-top:20px">You'll get this reminder daily until the changes are delivered or their dates pass.</p>
+</body></html>`
+        let alertRes: Response | null = null
+        try {
+          alertRes = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: 'Call Calendar <noreply@ssrounds.com>',
+              to: alertTo,
+              subject: 'Action needed: call schedule notifications not delivered',
+              html,
+            }),
+          })
+          if (!alertRes.ok) console.error(`notify-assignment-changes: office alert rejected (${alertRes.status}): ${await alertRes.text()}`)
+        } catch (e) {
+          console.error(`notify-assignment-changes: office alert failed: ${e}`)
+        }
+        if (alertRes?.ok) {
+          await sb.from('assignment_notify_pending').update({ last_alerted_at: nowIso }).in('id', rows.map(r => r.id))
+        }
+      } else {
+        console.warn('notify-assignment-changes: undelivered changes outstanding but no office contact or admin email to alert')
+      }
+    }
   }
 
   // ── Persist state (skipped entirely for test runs) ────────────────────
