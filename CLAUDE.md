@@ -77,6 +77,8 @@ If a migration was applied manually (via SQL editor) and not tracked by the CLI,
 supabase migration repair --status applied 20260510000000
 ```
 
+**Data API grants (tables created on/after 2026-10-30):** per a Supabase notice (email, not independently verified), `public` tables created from that date are no longer auto-granted Data API access. Include explicit `GRANT`s in the same migration as any new table, e.g. `select` to `anon` (only if it should be public) and `select, insert, update, delete` to `authenticated` and `service_role`; RLS still controls row access. Existing tables keep their grants. Migrations that predate this (e.g. `audit_log`, `staff_link_audit`) have no grants, and several core tables (`staff`, `assignments`, `daily_coverage`, `profiles`) aren't created by any migration, so a fresh-project/`db reset` rebuild from this repo won't work as-is.
+
 ### Database connection
 
 The direct DB host (`db.pkjlnjsswoadftkseffo.supabase.co`) is **IPv6-only**. For any tooling that needs a DB connection from an IPv4 network (e.g. CI, local pg_dump), use the **session pooler**:
