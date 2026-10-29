@@ -53,7 +53,40 @@ function levelLabel(v: string): string {
   return v === 'single' ? 'Single' : v === 'double' ? 'Double' : v === 'none' ? 'None' : v
 }
 
+// A failed read must abort the run, not look like "no data": the run would otherwise
+// advance last_run and the snapshot past changes it never saw, losing them for good.
+// Aborting leaves state untouched, so the next run re-scans the same window — and the
+// stale last_run is what notify-coverage-gaps' health check alerts on.
+// deno-lint-ignore no-explicit-any
+function check<T>(what: string, res: { data: T | null; error: any }): T | null {
+  if (res.error) throw new Error(`${what}: ${res.error.message ?? res.error}`)
+  return res.data
+}
+
+// PostgREST caps a response at 1000 rows; a bulk month entry (audit_log) or a long
+// schedule horizon (assignments) can exceed that, and a silently truncated read is the
+// same data-loss as a failed one.
+const PAGE = 1000
+// deno-lint-ignore no-explicit-any
+async function fetchAll<T>(what: string, page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>): Promise<T[]> {
+  const out: T[] = []
+  for (let from = 0; ; from += PAGE) {
+    const rows = check(what, await page(from, from + PAGE - 1)) ?? []
+    out.push(...rows)
+    if (rows.length < PAGE) return out
+  }
+}
+
 Deno.serve(async (req) => {
+  try {
+    return await handle(req)
+  } catch (e) {
+    console.error(`notify-assignment-changes: run aborted, state not advanced: ${e}`)
+    return new Response(`Run aborted: ${e}`, { status: 500, headers: CORS })
+  }
+})
+
+async function handle(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
   const sb = createClient(
@@ -86,18 +119,18 @@ Deno.serve(async (req) => {
   const isTest = !!testEmail
 
   // ── Staff / account lookups ───────────────────────────────────────────────
-  const { data: staffRows } = await sb
+  const staffRows = check('staff', await sb
     .from('staff')
     .select('id, short_name, user_id, email')
     .eq('active', true)
-    .order('sort_order')
+    .order('sort_order'))
 
   const staffById: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.id, r]))
   const staffByShortName: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.short_name, r]))
 
-  const { data: profileRows } = await sb.from('profiles').select('id, email')
+  const profileRows = check('profiles', await sb.from('profiles').select('id, email'))
   const emailByUserId: Record<string, string> = Object.fromEntries((profileRows ?? []).map(p => [p.id, p.email]))
 
   // Linked account takes priority (stays accurate automatically); the manually-entered
@@ -114,7 +147,7 @@ Deno.serve(async (req) => {
   }
 
   // ── Time window ────────────────────────────────────────────────────────
-  const { data: co } = await sb.from('company_info').select('assignment_notify_last_run, office_contact_user_id').eq('id', 1).maybeSingle()
+  const co = check<{ assignment_notify_last_run: string | null; office_contact_user_id: string | null }>('company_info', await sb.from('company_info').select('assignment_notify_last_run, office_contact_user_id').eq('id', 1).maybeSingle())
   const lastRun = co?.assignment_notify_last_run as string | null
   const now = new Date()
   const nowIso = now.toISOString()
@@ -124,23 +157,30 @@ Deno.serve(async (req) => {
   // (defaulting the "since" marker to now means the audit_log scan below finds nothing).
   const sinceIso = lastRun ?? nowIso
 
-  const { data: maxRow } = await sb
+  const maxRow = check<{ date: string }>('assignments max date', await sb
     .from('assignments')
     .select('date')
     .order('date', { ascending: false })
     .limit(1)
-    .maybeSingle()
+    .maybeSingle())
   const maxDate = maxRow?.date && maxRow.date > yesterday ? maxRow.date : yesterday
 
   // ═══════════════════════════════════════════════════════════════════════
   // 1. On-call changes — from audit_log, since last run
   // ═══════════════════════════════════════════════════════════════════════
 
-  const { data: auditRows } = await sb
+  // Upper-bounded at this run's start (the value saved as last_run), so a row written
+  // while the run is in flight isn't read now and again by the next run.
+  const auditRows = await fetchAll<{
+    changed_at: string; changed_by: string | null
+    old_row: Record<string, unknown> | null; new_row: Record<string, unknown> | null
+  }>('audit_log', (from, to) => sb
     .from('audit_log')
     .select('changed_at, changed_by, old_row, new_row')
     .gt('changed_at', sinceIso)
-    .order('changed_at')
+    .lte('changed_at', nowIso)
+    .order('changed_at').order('id')
+    .range(from, to))
 
   type RawTransition = {
     date: string; slot: 'am' | 'pm'; person: string
@@ -149,10 +189,7 @@ Deno.serve(async (req) => {
   }
   const rawTransitions: RawTransition[] = []
 
-  for (const row of (auditRows ?? []) as Array<{
-    changed_at: string; changed_by: string | null
-    old_row: Record<string, unknown> | null; new_row: Record<string, unknown> | null
-  }>) {
+  for (const row of auditRows) {
     const rec = row.new_row ?? row.old_row
     const date = rec?.date as string | undefined
     if (!date || date < yesterday || date > maxDate) continue
@@ -247,14 +284,19 @@ Deno.serve(async (req) => {
 
   // Fetches from one day before the window so a Sunday at the window's start can still
   // look back to its Saturday row (weekend storage: Saturday holds both days' data).
-  const { data: assignRangeRows } = await sb
+  const assignRangeRows = await fetchAll<{
+    date: string; person_id: string; am: string | null; pm: string | null
+    oncall_am: string | null; oncall_pm: string | null; exception: boolean | null
+  }>('assignments', (from, to) => sb
     .from('assignments')
     .select('date, person_id, am, pm, oncall_am, oncall_pm, exception')
     .gte('date', addDay(yesterday, -1))
     .lte('date', maxDate)
+    .order('date').order('person_id')
+    .range(from, to))
 
   const cellData: Record<string, Record<string, Cell>> = {}
-  for (const row of assignRangeRows ?? []) {
+  for (const row of assignRangeRows) {
     const person = staffById[row.person_id]?.short_name
     if (!person) continue
     if (!cellData[row.date]) cellData[row.date] = {}
@@ -268,21 +310,29 @@ Deno.serve(async (req) => {
     return cellData[dateIso]?.[person] ?? { am: '', pm: '', oncall_am: 'none', oncall_pm: 'none', exception: false }
   }
 
-  const { data: covRows } = await sb
-    .from('daily_coverage')
-    .select('date, day_call_id, bari_id, updated_by, updated_at')
-    .gte('date', yesterday)
-    .lte('date', maxDate)
+  const covRows = await fetchAll<{ date: string; day_call_id: string | null; bari_id: string | null; updated_by: string | null; updated_at: string | null }>(
+    'daily_coverage', (from, to) => sb
+      .from('daily_coverage')
+      .select('date, day_call_id, bari_id, updated_by, updated_at')
+      .gte('date', yesterday)
+      .lte('date', maxDate)
+      .order('date')
+      .range(from, to))
   const covByDate: Record<string, { day_call_id: string | null; bari_id: string | null; updated_by: string | null; updated_at: string | null }> =
-    Object.fromEntries((covRows ?? []).map(r => [r.date, r]))
+    Object.fromEntries(covRows.map(r => [r.date, r]))
 
-  const { data: snapRows } = await sb
-    .from('assignment_notify_snapshot')
-    .select('date, backup_id, bari_id')
-    .gte('date', yesterday)
-    .lte('date', maxDate)
+  // An empty snapshot read would make every date look like a first-time entry (silent) and
+  // then overwrite the real snapshot, so it must be a hard failure, never a silent empty.
+  const snapRows = await fetchAll<{ date: string; backup_id: string | null; bari_id: string | null }>(
+    'assignment_notify_snapshot', (from, to) => sb
+      .from('assignment_notify_snapshot')
+      .select('date, backup_id, bari_id')
+      .gte('date', yesterday)
+      .lte('date', maxDate)
+      .order('date')
+      .range(from, to))
   const snapByDate: Record<string, { backup_id: string | null; bari_id: string | null }> =
-    Object.fromEntries((snapRows ?? []).map(r => [r.date, r]))
+    Object.fromEntries(snapRows.map(r => [r.date, r]))
 
   const coverageEvents: NotifyEvent[] = []
   const newSnapshotRows: Array<{ date: string; backup_id: string | null; bari_id: string | null; updated_at: string }> = []
@@ -385,22 +435,37 @@ Deno.serve(async (req) => {
   const pendingSet = new Set<NotifyEvent>()
   const pendingIdsByPerson = new Map<string, number[]>()
   if (!isTest) {
-    const { data: pendingRows } = await sb.from('assignment_notify_pending').select('id, person, event_date, event')
+    const pendingRows = await fetchAll<{ id: number; person: string; event_date: string; event: NotifyEvent }>(
+      'assignment_notify_pending', (from, to) => sb
+        .from('assignment_notify_pending')
+        .select('id, person, event_date, event')
+        .order('id')
+        .range(from, to))
     const staleIds: number[] = []
-    for (const r of (pendingRows ?? []) as Array<{ id: number; person: string; event_date: string; event: NotifyEvent }>) {
+    for (const r of pendingRows) {
       // Past events are no longer worth sending; so are ones for since-deactivated staff.
       if (r.event_date < yesterday || !staffByShortName[r.person]) { staleIds.push(r.id); continue }
       pendingSet.add(r.event)
       if (!pendingIdsByPerson.has(r.person)) pendingIdsByPerson.set(r.person, [])
       pendingIdsByPerson.get(r.person)!.push(r.id)
     }
-    if (staleIds.length) await sb.from('assignment_notify_pending').delete().in('id', staleIds)
+    if (staleIds.length) {
+      const { error } = await sb.from('assignment_notify_pending').delete().in('id', staleIds)
+      if (error) console.error(`notify-assignment-changes: could not clear stale pending rows: ${error.message}`)
+    }
   }
 
+  // If an undelivered event can't be queued it would be lost for good once last_run
+  // advances, so a failed queue write holds the run's state back (see the persist step).
+  let queueWriteFailed = false
   async function queueUndelivered(person: string, events: NotifyEvent[]) {
     const fresh = events.filter(ev => !pendingSet.has(ev))
     if (isTest || !fresh.length) return
-    await sb.from('assignment_notify_pending').insert(fresh.map(ev => ({ person, event_date: ev.date, event: ev })))
+    const { error } = await sb.from('assignment_notify_pending').insert(fresh.map(ev => ({ person, event_date: ev.date, event: ev })))
+    if (error) {
+      queueWriteFailed = true
+      console.error(`notify-assignment-changes: could not queue ${fresh.length} undelivered change(s) for ${person}: ${error.message}`)
+    }
   }
 
   const seenEventKeys = new Set<string>()
@@ -497,7 +562,12 @@ Deno.serve(async (req) => {
     const sent = !!res?.ok
     if (sent) {
       const ids = pendingIdsByPerson.get(person)
-      if (!isTest && ids?.length) await sb.from('assignment_notify_pending').delete().in('id', ids)
+      if (!isTest && ids?.length) {
+        // Failing here means the same events are re-sent tomorrow; log it rather than abort,
+        // since the email did go out.
+        const { error } = await sb.from('assignment_notify_pending').delete().in('id', ids)
+        if (error) console.error(`notify-assignment-changes: sent but could not clear pending rows for ${person}: ${error.message}`)
+      }
     } else {
       await queueUndelivered(person, events)
     }
@@ -508,10 +578,12 @@ Deno.serve(async (req) => {
   // Throttled per row by last_alerted_at; the queue itself empties on delivery or once the
   // event dates pass, which also ends the reminders.
   if (!isTest) {
-    const { data: outstanding } = await sb
-      .from('assignment_notify_pending')
-      .select('id, person, event_date, last_alerted_at')
-    const rows = (outstanding ?? []) as Array<{ id: number; person: string; event_date: string; last_alerted_at: string | null }>
+    const rows = await fetchAll<{ id: number; person: string; event_date: string; last_alerted_at: string | null }>(
+      'assignment_notify_pending (outstanding)', (from, to) => sb
+        .from('assignment_notify_pending')
+        .select('id, person, event_date, last_alerted_at')
+        .order('id')
+        .range(from, to))
     const cutoff = now.getTime() - 20 * 3_600_000
     if (rows.some(r => !r.last_alerted_at || new Date(r.last_alerted_at).getTime() < cutoff)) {
       const byWho = new Map<string, { count: number; earliest: string }>()
@@ -528,7 +600,7 @@ Deno.serve(async (req) => {
       const officeUserId = co?.office_contact_user_id as string | null | undefined
       let alertTo: string[] = officeUserId && emailByUserId[officeUserId] ? [emailByUserId[officeUserId]] : []
       if (!alertTo.length) {
-        const { data: adminProfiles } = await sb.from('profiles').select('email').eq('role', 'admin')
+        const adminProfiles = check('admin profiles', await sb.from('profiles').select('email').eq('role', 'admin'))
         alertTo = (adminProfiles ?? []).map(p => p.email).filter(Boolean)
       }
 
@@ -569,11 +641,17 @@ Deno.serve(async (req) => {
   }
 
   // ── Persist state (skipped entirely for test runs) ────────────────────
+  // Neither the snapshot nor last_run may advance unless the whole run's changes are either
+  // delivered or safely queued; otherwise the next run would diff against a baseline that
+  // already skips them.
   if (!isTest) {
+    if (queueWriteFailed) throw new Error('could not queue undelivered changes')
     if (newSnapshotRows.length) {
-      await sb.from('assignment_notify_snapshot').upsert(newSnapshotRows)
+      const { error } = await sb.from('assignment_notify_snapshot').upsert(newSnapshotRows)
+      if (error) throw new Error(`saving snapshot: ${error.message}`)
     }
-    await sb.from('company_info').update({ assignment_notify_last_run: nowIso }).eq('id', 1)
+    const { error } = await sb.from('company_info').update({ assignment_notify_last_run: nowIso }).eq('id', 1)
+    if (error) throw new Error(`saving last run: ${error.message}`)
   }
 
   return new Response(JSON.stringify({
@@ -582,4 +660,4 @@ Deno.serve(async (req) => {
     coverageEvents: coverageEvents.length,
     notified: results,
   }), { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } })
-})
+}

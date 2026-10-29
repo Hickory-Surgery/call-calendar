@@ -48,6 +48,62 @@ function businessDaysBefore(dow: number, n: number): number {
 
 type Cell = { oncall_am: string; oncall_pm: string }
 
+// notify-assignment-changes runs daily at 08:00 UTC, so at this function's 07:00 run its
+// last_run is normally ~23h old; one missed run makes it ~47h. 26h sits between the two.
+// notify-assignment-changes deliberately leaves last_run untouched when a run fails, so a
+// stale value covers both "cron didn't fire" and "it keeps erroring".
+const NOTIFY_STALE_HOURS = 26
+
+// Emails the office contact (else all admins) every day the change-notification job
+// hasn't completed a run, until one does. Independent of the weekly gap check below.
+// deno-lint-ignore no-explicit-any
+async function alertIfNotifyStale(sb: any, now: Date) {
+  const { data: co, error } = await sb.from('company_info')
+    .select('assignment_notify_last_run, office_contact_user_id').eq('id', 1).maybeSingle()
+  if (error) { console.error(`notify-coverage-gaps: stale-run check could not read company_info: ${error.message}`); return }
+  const lastRun = co?.assignment_notify_last_run as string | null | undefined
+  if (!lastRun) return // never run yet (first deploy) — nothing to be stale against
+  const hoursSince = (now.getTime() - new Date(lastRun).getTime()) / 3_600_000
+  if (hoursSince < NOTIFY_STALE_HOURS) return
+
+  const officeUserId = co?.office_contact_user_id as string | null | undefined
+  let toEmails: string[] = []
+  if (officeUserId) {
+    const { data } = await sb.from('profiles').select('email').eq('id', officeUserId).maybeSingle()
+    if (data?.email) toEmails = [data.email]
+  }
+  if (!toEmails.length) {
+    const { data } = await sb.from('profiles').select('email').eq('role', 'admin')
+    toEmails = (data ?? []).map((p: { email: string }) => p.email).filter(Boolean)
+  }
+  if (!toEmails.length) { console.warn('notify-coverage-gaps: change notifications are stale but no one to alert'); return }
+
+  const lastRunText = new Date(lastRun).toLocaleString('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' })
+  const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
+  <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">Call schedule change notifications are not running</h2>
+  <p style="font-size:0.9rem">The daily job that emails staff about changes to their call assignments last completed <strong>${escapeHtml(lastRunText)}</strong> (${Math.floor(hoursSince)} hours ago). It either isn't being triggered or is failing on every run.</p>
+  <p style="font-size:0.9rem">Check the <code>notify-assignment-changes</code> logs in the Supabase dashboard. Nothing is lost while it's down — once a run succeeds it reports every change made since the last good run.</p>
+  <p style="font-size:0.78rem;color:#90A4AE;margin-top:20px">You'll get this every morning until a run completes.</p>
+</body></html>`
+
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: 'Call Calendar <noreply@ssrounds.com>',
+        to: toEmails,
+        subject: 'Action needed: call schedule change notifications are not running',
+        html,
+      }),
+    })
+    if (!res.ok) console.error(`notify-coverage-gaps: stale-run alert rejected (${res.status}): ${await res.text()}`)
+  } catch (e) {
+    console.error(`notify-coverage-gaps: stale-run alert failed: ${e}`)
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
 
@@ -80,6 +136,10 @@ Deno.serve(async (req) => {
   }
   const isTest = !!testEmail
   const forceSend = isTest || req.headers.get('x-force-send') === '1'
+
+  // Runs on every scheduled invocation, ahead of the weekly gate below, which returns early
+  // on all but one day a week. Skipped for manual/forced runs so those can't double-send.
+  if (!forceSend) await alertIfNotifyStale(sb, new Date())
 
   // ── Schedule check (skip unless forced) ───────────────────────────────
   const { data: co } = await sb.from('company_info').select('email_day, admin_alert_last_sent').eq('id', 1).maybeSingle()
