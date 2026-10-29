@@ -661,12 +661,29 @@ async function handle(req: Request): Promise<Response> {
       const dow = new Date(o.date + 'T00:00:00Z').getUTCDay()
       return (dow === 0 || dow === 6) ? '' : o.slot.toUpperCase()
     }
+    // AM and PM of the same date/type released by the same people read as one line, "Tue,
+    // Nov 24", rather than two; a lone half-day keeps its AM/PM label.
+    function combineSlots(openings: OrSlot[]) {
+      const rows = new Map<string, { date: string; type: string; label: string; slots: number; released: OrSlot['released'] }>()
+      for (const o of openings) {
+        const key = `${o.date}|${o.type}|${[...new Set(o.released.map(r => r.person))].sort().join(',')}`
+        const row = rows.get(key)
+        if (row) { row.slots++; row.label = ''; row.released = [...row.released, ...o.released] }
+        else rows.set(key, { date: o.date, type: o.type, label: slotLabel(o), slots: 1, released: [...o.released] })
+      }
+      return [...rows.values()].map(r => ({
+        ...r,
+        people: [...new Set(r.released.map(x => x.person))].join(', '),
+        latest: r.released.reduce((a, b) => (b.changedAt > a.changedAt ? b : a)),
+      }))
+    }
     async function sendOrAlert(to: string, openings: OrSlot[], banner: string) {
-      const rowsHtml = openings.map(o => `<tr>
-        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(fmtDay(o.date))} ${escapeHtml(slotLabel(o))}</td>
+      const rows = combineSlots(openings)
+      const rowsHtml = rows.map(o => `<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(`${fmtDay(o.date)} ${o.label}`.trim())}</td>
         <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1"><strong>${escapeHtml(o.type)}</strong></td>
-        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(o.released.map(r => r.person).join(', '))}</td>
-        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1;color:#607D8B;font-size:0.82rem">${escapeHtml(labelForChanger(o.released[o.released.length - 1].changedBy))}<br>${escapeHtml(fmtWhen(o.released[o.released.length - 1].changedAt))}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(o.people)}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1;color:#607D8B;font-size:0.82rem">${escapeHtml(labelForChanger(o.latest.changedBy))}<br>${escapeHtml(fmtWhen(o.latest.changedAt))}</td>
       </tr>`).join('\n')
       const html = `<!DOCTYPE html>
 <html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
@@ -688,7 +705,7 @@ async function handle(req: Request): Promise<Response> {
       const text = [
         'OR time now open — released and not taken by anyone:',
         '',
-        ...openings.map(o => `${fmtDay(o.date)} ${slotLabel(o)} — ${o.type} (released by ${o.released.map(r => r.person).join(', ')})`),
+        ...rows.map(o => `${`${fmtDay(o.date)} ${o.label}`.trim()} — ${o.type} (released by ${o.people})`),
       ].join('\n')
       try {
         const res = await fetch('https://api.resend.com/emails', {
@@ -697,7 +714,7 @@ async function handle(req: Request): Promise<Response> {
           body: JSON.stringify({
             from: 'Call Calendar <noreply@ssrounds.com>',
             to,
-            subject: `${isTest ? '[TEST] ' : ''}OR time now open${openings.length > 1 ? ` (${openings.length} slots)` : ''}`,
+            subject: `${isTest ? '[TEST] ' : ''}OR time now open${rows.length > 1 ? ` (${rows.length} dates)` : ''}`,
             html, text,
           }),
         })
