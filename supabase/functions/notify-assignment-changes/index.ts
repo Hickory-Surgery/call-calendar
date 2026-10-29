@@ -121,13 +121,13 @@ async function handle(req: Request): Promise<Response> {
   // ── Staff / account lookups ───────────────────────────────────────────────
   const staffRows = check('staff', await sb
     .from('staff')
-    .select('id, short_name, user_id, email')
+    .select('id, short_name, user_id, email, is_surgeon')
     .eq('active', true)
     .order('sort_order'))
 
-  const staffById: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
+  const staffById: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null; is_surgeon: boolean | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.id, r]))
-  const staffByShortName: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null }> =
+  const staffByShortName: Record<string, { id: string; short_name: string; user_id: string | null; email: string | null; is_surgeon: boolean | null }> =
     Object.fromEntries((staffRows ?? []).map(r => [r.short_name, r]))
 
   const profileRows = check('profiles', await sb.from('profiles').select('id, email'))
@@ -186,8 +186,11 @@ async function handle(req: Request): Promise<Response> {
     date: string; slot: 'am' | 'pm'; person: string
     from: string; to: string
     changedBy: string | null; changedAt: string
+    bulk?: boolean // part of a bulk clear — see markBulkClears
   }
   const rawTransitions: RawTransition[] = []
+  // Work-type (am/pm column) changes, for the OR-time alert and for counting clears.
+  const workChanges: RawTransition[] = []
 
   for (const row of auditRows) {
     const rec = row.new_row ?? row.old_row
@@ -203,14 +206,44 @@ async function handle(req: Request): Promise<Response> {
     const oldPm = (row.old_row?.oncall_pm as string | undefined) ?? 'none'
     const newPm = (row.new_row?.oncall_pm as string | undefined) ?? 'none'
 
-    function pushSlot(slot: 'am' | 'pm', from: string, to: string) {
+    function pushSlot(target: RawTransition[], slot: 'am' | 'pm', from: string, to: string) {
       if (from === to) return
       // Weekend storage: a Saturday row's pm field represents Sunday.
       const effDate = (dow === 6 && slot === 'pm') ? addDay(date!, 1) : date!
-      rawTransitions.push({ date: effDate, slot, person: person!, from, to, changedBy: row.changed_by, changedAt: row.changed_at })
+      target.push({ date: effDate, slot, person: person!, from, to, changedBy: row.changed_by, changedAt: row.changed_at })
     }
-    pushSlot('am', oldAm, newAm)
-    pushSlot('pm', oldPm, newPm)
+    pushSlot(rawTransitions, 'am', oldAm, newAm)
+    pushSlot(rawTransitions, 'pm', oldPm, newPm)
+    const work = (r: Record<string, unknown> | null, f: 'am' | 'pm') => (r?.[f] as string | null | undefined) || ''
+    pushSlot(workChanges, 'am', work(row.old_row, 'am'), work(row.new_row, 'am'))
+    pushSlot(workChanges, 'pm', work(row.old_row, 'pm'), work(row.new_row, 'pm'))
+  }
+
+  // Bulk clears (rebuilding or wiping a stretch of the schedule) would otherwise read as a
+  // pile of removals — "Needs coverage!" for each on-call slot, and OR time released for each
+  // F/C-surg slot. One account clearing BULK_CLEAR_MIN or more slots to blank (any work type
+  // or on-call) within BULK_CLEAR_WINDOW_MS marks those clears as bulk; they are ignored as
+  // removals. Only clears to blank count: changing a week to "unavailable" is a real release.
+  // (Next week's genuine call gaps are still caught by notify-coverage-gaps' state check.)
+  const BULK_CLEAR_MIN = 6
+  const BULK_CLEAR_WINDOW_MS = 10 * 60 * 1000
+  const isBlank = (v: string) => v === '' || v === 'none'
+  {
+    const clearsByWho = new Map<string, RawTransition[]>()
+    for (const t of [...rawTransitions, ...workChanges]) {
+      if (isBlank(t.from) || !isBlank(t.to)) continue
+      const who = t.changedBy ?? 'system'
+      if (!clearsByWho.has(who)) clearsByWho.set(who, [])
+      clearsByWho.get(who)!.push(t)
+    }
+    for (const clears of clearsByWho.values()) {
+      clears.sort((a, b) => a.changedAt.localeCompare(b.changedAt))
+      let lo = 0
+      for (let hi = 0; hi < clears.length; hi++) {
+        while (new Date(clears[hi].changedAt).getTime() - new Date(clears[lo].changedAt).getTime() > BULK_CLEAR_WINDOW_MS) lo++
+        if (hi - lo + 1 >= BULK_CLEAR_MIN) for (let k = lo; k <= hi; k++) clears[k].bulk = true
+      }
+    }
   }
 
   // Collapse multiple edits to the same (person, date, slot) within this window into a
@@ -219,23 +252,29 @@ async function handle(req: Request): Promise<Response> {
   // KP->MC then MC->JH — would replay every intermediate hop (MC would get notified
   // about an assignment they never actually ended up holding) instead of reporting the
   // true before/after for each person.
-  const netGroups = new Map<string, RawTransition[]>()
-  for (const t of rawTransitions) {
-    const key = `${t.person}|${t.date}|${t.slot}`
-    if (!netGroups.has(key)) netGroups.set(key, [])
-    netGroups.get(key)!.push(t)
+  function netTransitions(raw: RawTransition[]): RawTransition[] {
+    const groups = new Map<string, RawTransition[]>()
+    for (const t of raw) {
+      const key = `${t.person}|${t.date}|${t.slot}`
+      if (!groups.has(key)) groups.set(key, [])
+      groups.get(key)!.push(t)
+    }
+    const netted: RawTransition[] = []
+    for (const group of groups.values()) {
+      const first = group[0]
+      const last = group[group.length - 1]
+      if (first.from === last.to) continue
+      netted.push({
+        date: first.date, slot: first.slot, person: first.person,
+        from: first.from, to: last.to,
+        changedBy: last.changedBy, changedAt: last.changedAt, bulk: last.bulk,
+      })
+    }
+    return netted
   }
-  const nettedTransitions: RawTransition[] = []
-  for (const group of netGroups.values()) {
-    const first = group[0]
-    const last = group[group.length - 1]
-    if (first.from === last.to) continue
-    nettedTransitions.push({
-      date: first.date, slot: first.slot, person: first.person,
-      from: first.from, to: last.to,
-      changedBy: last.changedBy, changedAt: last.changedAt,
-    })
-  }
+  const nettedTransitions = netTransitions(rawTransitions)
+  const nettedWork = netTransitions(workChanges)
+  let bulkIgnored = 0
 
   const onCallEvents: NotifyEvent[] = []
   const losses = nettedTransitions.filter(t => t.from !== 'none' && t.to === 'none')
@@ -261,6 +300,8 @@ async function handle(req: Request): Promise<Response> {
         from: loss.person, to: gain.person,
         changedBy: gain.changedBy, changedAt: gain.changedAt,
       })
+    } else if (loss.bulk) {
+      bulkIgnored++
     } else {
       onCallEvents.push({
         person: loss.person, date: loss.date, role: 'On call',
@@ -423,6 +464,43 @@ async function handle(req: Request): Promise<Response> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+  // 2b. OR time opened up — F-surg/C-surg released and not taken by anyone else
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // Counted per (date, slot, type) so a hospital adding a second room (two people on the
+  // same F-surg/C-surg slot) still works: time is open only when more people released the
+  // slot than picked it up. A hand-off to someone else nets to zero and stays silent.
+  const OR_TYPES = ['F-surg', 'C-surg']
+  type OrSlot = {
+    date: string; slot: 'am' | 'pm'; type: string; claimed: number
+    released: Array<{ person: string; changedBy: string | null; changedAt: string }>
+  }
+  const orSlots = new Map<string, OrSlot>()
+  function orSlot(date: string, slot: 'am' | 'pm', type: string): OrSlot {
+    const key = `${date}|${slot}|${type}`
+    if (!orSlots.has(key)) orSlots.set(key, { date, slot, type, claimed: 0, released: [] })
+    return orSlots.get(key)!
+  }
+  for (const t of nettedWork) {
+    if (OR_TYPES.includes(t.from)) {
+      if (t.bulk && isBlank(t.to)) { bulkIgnored++; continue }
+      orSlot(t.date, t.slot, t.from).released.push({ person: t.person, changedBy: t.changedBy, changedAt: t.changedAt })
+    }
+    if (OR_TYPES.includes(t.to)) orSlot(t.date, t.slot, t.to).claimed++
+  }
+  // A CLOSED day clears everyone's assignments, which isn't OR time anyone can claim.
+  function isDayClosedOn(dateIso: string): boolean {
+    if (!staffRows?.length) return false
+    const dow = new Date(dateIso + 'T00:00:00Z').getUTCDay()
+    const c = getCell(dow === 0 ? addDay(dateIso, -1) : dateIso, staffRows[0].short_name)
+    return dow === 0 ? c.pm === 'CLOSED' : c.am === 'CLOSED'
+  }
+  const orOpenings = [...orSlots.values()]
+    .filter(o => o.released.length > o.claimed && o.date >= today && !isDayClosedOn(o.date))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.slot.localeCompare(b.slot))
+  if (bulkIgnored) console.warn(`notify-assignment-changes: ignored ${bulkIgnored} removal(s) that were part of a bulk clear`)
+
+  // ═══════════════════════════════════════════════════════════════════════
   // 3. Compose + send, one digest per affected person
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -574,6 +652,81 @@ async function handle(req: Request): Promise<Response> {
     results.push({ person, email: toEmail, sent })
   }
 
+  // ── OR time alert: every surgeon with an email (not the people who released it) ──
+  // No retry queue — a missed alert about open OR time is stale by the next run. Surgeons
+  // with no email are only logged.
+  const orResults: Array<{ person: string; sent: boolean }> = []
+  if (orOpenings.length) {
+    const slotLabel = (o: OrSlot) => {
+      const dow = new Date(o.date + 'T00:00:00Z').getUTCDay()
+      return (dow === 0 || dow === 6) ? '' : o.slot.toUpperCase()
+    }
+    async function sendOrAlert(to: string, openings: OrSlot[], banner: string) {
+      const rowsHtml = openings.map(o => `<tr>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(fmtDay(o.date))} ${escapeHtml(slotLabel(o))}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1"><strong>${escapeHtml(o.type)}</strong></td>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1">${escapeHtml(o.released.map(r => r.person).join(', '))}</td>
+        <td style="padding:6px 10px;border-bottom:1px solid #ECEFF1;color:#607D8B;font-size:0.82rem">${escapeHtml(labelForChanger(o.released[o.released.length - 1].changedBy))}<br>${escapeHtml(fmtWhen(o.released[o.released.length - 1].changedAt))}</td>
+      </tr>`).join('\n')
+      const html = `<!DOCTYPE html>
+<html><body style="font-family:system-ui,sans-serif;color:#37474F;max-width:650px;margin:0 auto;padding:24px">
+  ${banner}
+  <h2 style="font-size:1.1rem;font-weight:700;margin-bottom:4px">OR time now open</h2>
+  <p style="font-size:0.9rem;color:#607D8B;margin-top:0;margin-bottom:16px">
+    These F-surg/C-surg assignments were released and nobody has taken them. Talk to a scheduler if you'd like one.
+  </p>
+  <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+    <thead><tr style="background:#F5F7FA">
+      <th style="padding:6px 10px;text-align:left">Date</th>
+      <th style="padding:6px 10px;text-align:left">OR time</th>
+      <th style="padding:6px 10px;text-align:left">Released by</th>
+      <th style="padding:6px 10px;text-align:left">Changed by</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body></html>`
+      const text = [
+        'OR time now open — released and not taken by anyone:',
+        '',
+        ...openings.map(o => `${fmtDay(o.date)} ${slotLabel(o)} — ${o.type} (released by ${o.released.map(r => r.person).join(', ')})`),
+      ].join('\n')
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${Deno.env.get('RESEND_API_KEY')}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            from: 'Call Calendar <noreply@ssrounds.com>',
+            to,
+            subject: `${isTest ? '[TEST] ' : ''}OR time now open${openings.length > 1 ? ` (${openings.length} slots)` : ''}`,
+            html, text,
+          }),
+        })
+        if (!res.ok) console.error(`notify-assignment-changes: OR alert rejected for ${to} (${res.status}): ${await res.text()}`)
+        return res.ok
+      } catch (e) {
+        console.error(`notify-assignment-changes: OR alert failed for ${to}: ${e}`)
+        return false
+      }
+    }
+
+    if (isTest) {
+      const banner = `<p style="background:#FFF3E0;color:#E65100;padding:8px 12px;border-radius:4px;font-size:0.85rem">TEST RUN — a real run sends each surgeon only the slots they didn't release themselves.</p>`
+      orResults.push({ person: '(test)', sent: await sendOrAlert(testEmail!, orOpenings, banner) })
+    } else {
+      for (const r of (staffRows ?? []).filter(r => r.is_surgeon !== false)) {
+        const mine = orOpenings.filter(o => !o.released.some(x => x.person === r.short_name))
+        if (!mine.length) continue
+        const toEmail = emailFor(r.short_name)
+        if (!toEmail) {
+          console.warn(`notify-assignment-changes: no email on file for surgeon ${r.short_name}; OR-time alert not sent`)
+          orResults.push({ person: r.short_name, sent: false })
+          continue
+        }
+        orResults.push({ person: r.short_name, sent: await sendOrAlert(toEmail, mine, '') })
+      }
+    }
+  }
+
   // ── Remind the office contact (or all admins) while anything is undeliverable ──
   // Throttled per row by last_alerted_at; the queue itself empties on delivery or once the
   // event dates pass, which also ends the reminders.
@@ -658,6 +811,8 @@ async function handle(req: Request): Promise<Response> {
     window: { from: yesterday, to: maxDate },
     onCallEvents: onCallEvents.length,
     coverageEvents: coverageEvents.length,
+    orOpenings: orOpenings.length,
     notified: results,
+    orNotified: orResults,
   }), { status: 200, headers: { ...CORS, 'Content-Type': 'application/json' } })
 }

@@ -5256,6 +5256,10 @@
               <input type="checkbox" class="bari-check" data-idx="${i}"${bariatric[name] ? ' checked' : ''}>
               Bari
             </label>
+            <label class="bariatric-label" title="Surgeons are emailed when F-surg/C-surg OR time opens up">
+              <input type="checkbox" class="surgeon-check"${(row ? row.is_surgeon !== false : true) ? ' checked' : ''}>
+              Surgeon
+            </label>
             ${subBtn}
             <span class="pending-badge staff-no-email" title="No login account or email on file — this person won't receive assignment-change emails" style="display:${(!userIdVal && !emailVal) ? '' : 'none'}">No email</span>
             <span class="staff-dates-toggle" title="Set start/stop dates and linked account" style="color:${startVal || stopVal || userIdVal || emailVal ? '#1565C0' : ''}">&#8943;</span>
@@ -5446,6 +5450,7 @@
         const short = item.querySelector('.staff-short').value.trim();
         const full = item.querySelector('.staff-full').value.trim();
         const isBari = item.querySelector('.bari-check').checked;
+        const isSurgeon = item.querySelector('.surgeon-check').checked;
         const startVal = item.querySelector('.staff-start')?.value;
         const stopVal  = item.querySelector('.staff-stop')?.value;
         const start_date = startVal || null;
@@ -5466,6 +5471,7 @@
             short_name: short,
             display_name: full || short,
             is_bariatric: isBari,
+            is_surgeon: isSurgeon,
             sort_order: i,
             start_date,
             stop_date,
@@ -5477,6 +5483,7 @@
             short_name: short,
             display_name: full || short,
             is_bariatric: isBari,
+            is_surgeon: isSurgeon,
             sort_order: i,
             active: true,
             start_date,
